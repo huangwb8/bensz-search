@@ -1,6 +1,7 @@
 FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
-    UV_COMPILE_BYTECODE=1 LITELLM_LOCAL_MODEL_COST_MAP=True \
+    UV_COMPILE_BYTECODE=1 UV_PROJECT_ENVIRONMENT=/app/.bensz-api/.venv \
+    UV_CACHE_DIR=/app/.bensz-api/uv-cache LITELLM_LOCAL_MODEL_COST_MAP=True \
     LITELLM_TELEMETRY=False
 WORKDIR /app
 RUN pip install --no-cache-dir uv==0.11.14
@@ -11,7 +12,7 @@ COPY config ./config
 COPY demo ./demo
 RUN useradd --uid 10001 --create-home appuser && mkdir /app/data && chown -R appuser:appuser /app
 USER appuser
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/app/.bensz-api/.venv/bin:$PATH"
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/liveliness', timeout=3)"
