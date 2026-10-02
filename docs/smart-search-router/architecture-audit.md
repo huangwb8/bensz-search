@@ -2,7 +2,7 @@
 
 ## 审计依据
 
-2026-10-02，依据项目 `.venv` 中已安装且由 `uv.lock` 锁定的 **LiteLLM 1.103.2 发行包**。upstream revision 使用发行版本标识 `1.103.2`，未取得对应 Git commit，不虚构提交号。锁文件包含发行包来源及 SHA256 校验值。
+2026-10-02，依据项目 `.bensz-api/.venv`（原根目录 `.venv`，现已迁移）中已安装且由 `uv.lock` 锁定的 **LiteLLM 1.103.2 发行包**。upstream revision 使用发行版本标识 `1.103.2`，未取得对应 Git commit，不虚构提交号。锁文件包含发行包来源及 SHA256 校验值。
 
 `.bensz-api/task-20261002-1415-search/shared/litellm` 的参考源码标注 1.105.0，且未提供可解析 HEAD，不能用作当前部署 revision 的依据。源码路径均相对于已安装 `litellm/` 包。原审计文件误含 pyproject 配置，本次按实际源码恢复审计内容。
 

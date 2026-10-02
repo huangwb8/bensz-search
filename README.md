@@ -93,11 +93,13 @@ docker compose -f docs/deploy/compose.yaml ps
 ## 开发与验证
 
 ```bash
-uv sync --extra dev
-uv run pytest -q
-uv run ruff check src tests demo scripts docs/deploy
-uv run ruff format --check src tests demo scripts docs/deploy
+sh scripts/uv.sh sync --extra dev
+sh scripts/uv.sh run pytest -q
+sh scripts/uv.sh run ruff check src tests demo scripts docs/deploy
+sh scripts/uv.sh run ruff format --check src tests demo scripts docs/deploy
 ```
+
+开发命令统一使用 `scripts/uv.sh`，入口将虚拟环境固定在 `.bensz-api/.venv/`，uv 依赖缓存放在 `.bensz-api/uv-cache/`；pytest 与 Ruff 配置分别将缓存固定在 `.bensz-api/.pytest_cache/` 和 `.bensz-api/.ruff_cache/`。直接执行原生 `uv sync` / `uv run` 不会加载该入口设置，会使用 uv 默认的根目录 `.venv/`。
 
 60 条路由 benchmark 位于 [routing.json](tests/benchmarks/routing.json)，允许多个合理 provider。其余测试覆盖原生 API、权限、融合、fallback、登录/CSRF/撤销、配置热更新、加密和持久化。真实外部检索及后台浏览器证据见 [0.2 验收记录](docs/smart-search-router/production-verification.md)。
 
@@ -109,7 +111,7 @@ fixture 仅用于开发测试，使用独立项目/端口避免覆盖真实服�
 BENSZ_SEARCH_PORT=8900 LITELLM_MASTER_KEY=sk-bensz-search-local-demo \
   docker compose -f docs/deploy/compose.yaml -p bensz-search-fixtures -f docs/deploy/compose.demo.yaml up -d --build --wait
 LITELLM_MASTER_KEY=sk-bensz-search-local-demo \
-  uv run python scripts/demo.py --base-url http://127.0.0.1:8900
+  sh scripts/uv.sh run python scripts/demo.py --base-url http://127.0.0.1:8900
 ```
 
 模拟结果标注 `DEMO FIXTURE`。旧 8899 live demo 独立于当前 8898 产品部署，不作为主入口。
