@@ -1,0 +1,10 @@
+# From project root: docker compose -p bensz-search-live -f docs/deploy/compose.yaml -f docs/deploy/compose.live.yaml up -d
+services:
+  search:
+    ports: !override
+      - "127.0.0.1:${BENSZ_SEARCH_LIVE_PORT:-8899}:8000"
+    environment:
+      BENSZ_SEARCH_CONFIG: config/live.yaml
+      BENSZ_SEARCH_MODE: development
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-bensz-search-local-demo}
+      SEARXNG_API_BASE: ${SEARXNG_API_BASE:-http://host.docker.internal:8080}

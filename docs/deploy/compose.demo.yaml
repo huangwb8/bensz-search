@@ -1,0 +1,19 @@
+# From project root: docker compose -f docs/deploy/compose.yaml -f docs/deploy/compose.demo.yaml up -d --build
+services:
+  search:
+    environment:
+      BENSZ_SEARCH_CONFIG: config/demo.yaml
+      BENSZ_SEARCH_MODE: development
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-bensz-search-local-demo}
+    depends_on:
+      fixtures:
+        condition: service_healthy
+  fixtures:
+    image: bensz-search:0.2.0
+    command: ["uvicorn", "demo.fixtures:app", "--host", "0.0.0.0", "--port", "8090", "--no-access-log"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped

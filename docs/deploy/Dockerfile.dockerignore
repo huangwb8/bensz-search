@@ -1,0 +1,15 @@
+.venv
+.bensz-api
+.git
+**/.env
+**/.env.*
+**/.secrets
+secrets
+data
+__pycache__
+.pytest_cache
+.ruff_cache
+tests
+docs
+Prompts.md
+*.code-workspace

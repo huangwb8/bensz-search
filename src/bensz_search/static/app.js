@@ -1,0 +1,191 @@
+'use strict';
+
+(() => {
+  const app = document.getElementById('app');
+  const dialog = document.getElementById('dialog');
+  dialog.addEventListener('close', () => { dialog.innerHTML = ''; });
+  const state = { user: null, csrf: '', page: 'overview', providers: [], catalog: [], overview: null, revision: 0 };
+  const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const fmt = value => new Intl.NumberFormat('zh-CN').format(value || 0);
+  const date = value => value ? new Date(typeof value === 'number' ? value * 1000 : value).toLocaleString('zh-CN', { hour12: false }) : '尚未使用';
+  const admin = () => state.user?.role === 'admin';
+  const icon = name => {
+    const paths = { overview: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>', providers: '<path d="M7 8V3m10 5V3M5 8h14v3a7 7 0 0 1-14 0zm7 10v3"/>', search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>', keys: '<circle cx="8" cy="8" r="5"/><path d="m12 12 9 9m-4-4 3-3m-6 0 3-3"/>', users: '<circle cx="9" cy="7" r="4"/><path d="M2 21v-3a7 7 0 0 1 14 0v3m1-18a4 4 0 0 1 0 8m3 10v-3a7 7 0 0 0-3-6"/>', settings: '<circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/>', integration: '<path d="m8 5-7 7 7 7m8-14 7 7-7 7m-3-17-2 20"/>' };
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">${paths[name] || paths.overview}</svg>`;
+  };
+  const pages = { overview: ['运行概览', 'OVERVIEW', '从服务配置到真实搜索，在这里管理你的搜索基础设施。'], providers: ['Search API', 'PROVIDERS', '连接不同搜索服务，统一路由、超时与访问配置。'], search: ['搜索调试台', 'PLAYGROUND', '发送真实查询，检查搜索结果与路由执行情况。'], keys: ['访问密钥', 'API KEYS', '为应用与 AI Agent 创建独立的访问密钥。'], users: ['用户管理', 'TEAM', '管理后台账号，以及管理员和成员的访问权限。'], settings: ['个人设置', 'ACCOUNT', '管理你的登录账号与密码。'], integration: ['接入指南', 'INTEGRATION', '通过一个兼容的 Search API，为你的应用接入智能搜索。'] };
+  let toastTimer;
+  let snippetSequence = 0;
+  function updateSnippetControls() {
+    document.querySelectorAll('[data-snippet-toggle]').forEach(button => {
+      const snippet = document.getElementById(button.dataset.snippetToggle);
+      if (snippet) button.hidden = !snippet.classList.contains('expanded') && snippet.scrollHeight <= snippet.clientHeight + 1;
+    });
+  }
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-snippet-toggle]');
+    if (!button) return;
+    const snippet = document.getElementById(button.dataset.snippetToggle);
+    if (!snippet) return;
+    const expanded = snippet.classList.toggle('expanded');
+    button.setAttribute('aria-expanded', String(expanded));
+    button.textContent = expanded ? '收起摘要' : '展开摘要';
+  });
+  window.addEventListener('resize', () => requestAnimationFrame(updateSnippetControls));
+  function notify(message, error = false) {
+    const node = document.getElementById('notice');
+    node.textContent = message;
+    node.className = `toast${error ? ' error' : ''}`;
+    node.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { node.hidden = true; }, error ? 9000 : 4500);
+  }
+  async function api(path, method = 'GET', body) {
+    const headers = { Accept: 'application/json' };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (method !== 'GET') headers['X-CSRF-Token'] = state.csrf;
+    const response = await fetch(`/admin/api${path}`, { method, credentials: 'same-origin', headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const data = response.status === 204 ? {} : await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (response.status === 401 && path !== '/login') { state.user = null; state.csrf = ''; dialog.close(); login(); }
+      const detail = typeof data.detail === 'string' ? data.detail : Array.isArray(data.detail) ? data.detail.map(item => item.msg).join('；') : `请求失败（${response.status}）`;
+      throw new Error(detail);
+    }
+    return data;
+  }
+  function errorBox(form, error) { form.querySelector('.form-error').textContent = error.message; }
+  function busy(button, value) { if (button) { button.disabled = value; button.setAttribute('aria-busy', String(value)); } }
+  function login() {
+    state.revision++;
+    app.innerHTML = `<div class="login-layout"><section class="login-intro"><div><div class="brand"><span class="brand-mark">b</span>bensz-search</div><p class="brand-caption">SEARCH INFRASTRUCTURE, SIMPLIFIED</p></div><div><p class="eyebrow login-eyebrow">统一入口 · 智能搜索</p><h1>连接搜索服务。<br>让每一次查询<br>找到合适的来源。</h1><p class="lead">配置 Search API，管理访问权限，查看真实搜索结果。为你的应用和 AI Agent 提供统一搜索能力。</p></div><div class="login-lines"><span>多服务路由</span><span>结果融合</span><span>独立访问密钥</span></div></section><main class="login-main" id="main"><form class="login-form" id="login-form"><p class="eyebrow">WELCOME BACK</p><h2>登录搜索控制台</h2><p class="intro">使用管理员为你创建的账号登录。</p><div class="form-error" role="alert"></div><div class="field"><label for="username">用户名</label><input id="username" name="username" autocomplete="username" required maxlength="64" placeholder="输入用户名" autofocus></div><div class="field"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="输入登录密码"></div><button class="btn primary" type="submit">登录控制台 <span aria-hidden="true">→</span></button><p class="login-footer">首次部署的管理员账号由本地部署配置提供。<br>账号和搜索服务密钥仅用于当前部署。</p></form></main></div>`;
+    document.getElementById('login-form').addEventListener('submit', async event => {
+      event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('button');
+      busy(button, true); form.querySelector('.form-error').textContent = '';
+      try { const data = await api('/login', 'POST', Object.fromEntries(new FormData(form))); state.user = data.user; state.csrf = data.csrf_token; shell(); await navigate('overview'); }
+      catch (error) { errorBox(form, error); }
+      finally { busy(button, false); }
+    });
+  }
+  function shell() {
+    const nav = Object.entries(pages).filter(([key]) => admin() || !['providers', 'users'].includes(key)).map(([key, values]) => `${key === 'settings' ? '<div class="nav-divider"></div>' : ''}<button type="button" data-page="${key}">${icon(key)}<span>${values[0]}</span></button>`).join('');
+    app.innerHTML = `<div class="layout"><aside class="sidebar"><div class="sidebar-header"><div class="brand"><span class="brand-mark">b</span>bensz-search</div><button class="btn small menu-toggle" id="menu-toggle" aria-expanded="false" aria-controls="navigation">菜单</button></div><p class="brand-caption">搜索服务控制台</p><nav class="nav" id="navigation" aria-label="后台导航">${nav}</nav><div class="sidebar-foot"><strong>统一搜索 · 智能路由</strong><span>配置与你的真实服务保持同步</span></div></aside><div class="workspace"><header class="topbar"><span class="topbar-title">工作空间 / <span id="breadcrumb">运行概览</span></span><div class="account"><span class="avatar" aria-hidden="true">${escape(state.user.username.slice(0, 1).toUpperCase())}</span><span class="user-name">${escape(state.user.username)}</span><span class="role">${admin() ? '管理员' : '成员'}</span><button class="btn ghost small" id="logout">退出登录</button></div></header><main id="main" class="content" tabindex="-1"></main></div></div>`;
+    document.querySelectorAll('[data-page]').forEach(button => button.addEventListener('click', () => { navigate(button.dataset.page); const sidebar = document.querySelector('.sidebar'); sidebar.classList.remove('nav-open'); document.getElementById('menu-toggle').setAttribute('aria-expanded', 'false'); }));
+    document.getElementById('menu-toggle').addEventListener('click', event => { const expanded = document.querySelector('.sidebar').classList.toggle('nav-open'); event.currentTarget.setAttribute('aria-expanded', String(expanded)); });
+    document.getElementById('logout').addEventListener('click', async event => { busy(event.currentTarget, true); try { await api('/logout', 'POST', {}); state.user = null; state.csrf = ''; login(); } catch (error) { notify(error.message, true); busy(event.currentTarget, false); } });
+  }
+  function head(page, actions = '') { const [title, eyebrow, description] = pages[page]; return `<div class="page-head"><div><p class="eyebrow">${eyebrow}</p><h1>${title}</h1><p>${description}</p></div>${actions}</div>`; }
+  function empty(title, description) { return `<div class="empty"><h3>${escape(title)}</h3><p>${escape(description)}</p></div>`; }
+  async function navigate(page) {
+    if (!state.user) return;
+    state.page = page; const revision = ++state.revision;
+    document.querySelectorAll('[data-page]').forEach(node => { node.classList.toggle('active', node.dataset.page === page); if (node.dataset.page === page) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); });
+    document.getElementById('breadcrumb').textContent = pages[page][0];
+    const main = document.getElementById('main'); main.innerHTML = `${head(page)}<div class="loading" role="status">正在读取最新配置…</div>`;
+    try {
+      const data = ['overview', 'search'].includes(page) ? await api('/overview') : ['providers', 'keys', 'users'].includes(page) ? await api(`/${page}`) : {};
+      if (state.revision !== revision) return;
+      if (['overview', 'search'].includes(page)) { state.overview = data; state.providers = data.providers || []; }
+      if (page === 'providers') { state.providers = data.providers || []; state.catalog = data.catalog || []; }
+      ({ overview: renderOverview, providers: renderProviders, search: renderSearch, keys: renderKeys, users: renderUsers, settings: renderSettings, integration: renderIntegration })[page](main, data);
+    } catch (error) {
+      if (state.revision !== revision) return;
+      main.innerHTML = `${head(page)}<div class="panel">${empty('无法加载', error.message)}<div class="panel-body retry-actions"><button class="btn" id="retry">重新加载</button></div></div>`;
+      document.getElementById('retry').addEventListener('click', () => navigate(page));
+    }
+  }
+  function status(enabled) { return `<span class="tag ${enabled ? 'good' : ''}"><span class="dot"></span>${enabled ? '已启用' : '已停用'}</span>`; }
+  function providerRows(providers, editable = false) {
+    return providers.map(provider => `<tr><td><strong>${escape(provider.name)}</strong><div class="cell-sub">${escape(provider.provider)}</div></td><td>${status(provider.enabled)}</td>${admin() ? `<td><span>${escape(provider.api_base || '服务默认地址')}</span><div class="cell-sub">${provider.has_api_key ? '已配置密钥' : '未设置密钥'} · 超时 ${fmt(provider.timeout_ms)} ms</div></td>` : ''}${editable ? `<td><div class="actions"><button class="btn small" data-provider-edit="${escape(provider.name)}">编辑</button><button class="btn small" data-provider-test="${escape(provider.name)}">测试</button><button class="btn small" data-provider-toggle="${escape(provider.name)}">${provider.enabled ? '停用' : '启用'}</button><button class="btn small danger" data-provider-delete="${escape(provider.name)}">删除</button></div></td>` : ''}</tr>`).join('');
+  }
+  function renderOverview(main, data) {
+    const metrics = data.metrics || {}; const counters = metrics.counters || {}; const providers = data.providers || [];
+    const recent = [...(metrics.recent || [])].reverse().slice(0, 6);
+    main.innerHTML = `${head('overview', '<button class="btn" id="refresh">刷新数据 ↻</button>')}<div class="stats"><div class="stat"><div class="stat-label">启用的 Search API</div><div class="stat-value">${fmt(data.enabled_count)}</div><div class="stat-note">共配置 ${fmt(data.configured_count)} 个服务</div></div><div class="stat"><div class="stat-label">搜索请求</div><div class="stat-value">${fmt(counters.requests)}</div><div class="stat-note">当前服务进程累计</div></div><div class="stat"><div class="stat-label">回退调用</div><div class="stat-value">${fmt(counters.fallbacks)}</div><div class="stat-note">主服务失败后触发</div></div><div class="stat"><div class="stat-label">运行模式</div><div class="stat-value stat-mode">${escape(data.mode === 'production' ? '正式模式' : data.mode === 'mock' ? '模拟模式' : data.mode || '未知')}</div><div class="stat-note">${escape(data.version || '版本未提供')}</div></div></div>${data.mode === 'mock' ? '<div class="note warning">当前配置使用模拟结果。请连接真实 Search API 后再对外提供搜索服务。</div>' : ''}<div class="grid-two"><section class="panel"><div class="panel-head"><div><h2>搜索服务</h2><p>启用的服务参与智能搜索路由</p></div><button class="btn small" id="manage-provider">${admin() ? '管理 API →' : '开始搜索 →'}</button></div>${providers.length ? `<div class="table-wrap"><table><thead><tr><th>服务名称</th><th>状态</th>${admin() ? '<th>连接配置</th>' : ''}</tr></thead><tbody>${providerRows(providers)}</tbody></table></div>` : empty('还没有搜索服务', '添加真实 Search API，开始第一次搜索。')}</section><section class="panel"><div class="panel-head"><h2>开始使用</h2></div><div class="panel-body"><ol class="steps"><li><strong>连接搜索来源</strong><br>配置服务地址和 API Key，测试连接。</li><li><strong>验证真实搜索</strong><br>使用调试台检查返回结果与路由状态。</li><li><strong>接入你的应用</strong><br>创建独立密钥，通过 POST /search 调用。</li></ol></div></section></div><section class="panel"><div class="panel-head"><div><h2>最近调用</h2><p>仅展示请求状态，不记录搜索词</p></div><span class="tag">进程内指标</span></div>${recent.length ? `<div class="table-wrap"><table><thead><tr><th>请求 ID</th><th>搜索意图</th><th>搜索服务</th><th>结果数</th><th>执行状态</th></tr></thead><tbody>${recent.map(item => `<tr><td class="cell-sub">${escape(item.request_id)}</td><td>${escape(item.intent)}</td><td>${escape((item.providers || []).join(' / '))}</td><td>${fmt(item.result_count)}</td><td>${escape((item.attempts || []).map(attempt => `${attempt.provider}: ${attempt.status}`).join(' · '))}</td></tr>`).join('')}</tbody></table></div>` : empty('暂无调用记录', '完成一次搜索后，这里会显示实际执行情况。')}</section><p class="section-foot">指标范围：当前服务进程。${metrics.persistent ? '已持久化。' : '服务重启后计数重置，不作为历史用量账单。'}</p>`;
+    document.getElementById('refresh').onclick = () => navigate('overview');
+    document.getElementById('manage-provider').onclick = () => navigate(admin() ? 'providers' : 'search');
+  }
+  function renderProviders(main) {
+    main.innerHTML = `${head('providers', '<button class="btn primary" id="add-provider">＋ 添加 Search API</button>')}<section class="panel"><div class="panel-head"><div><h2>已配置服务</h2><p>修改后立即用于新搜索请求；编辑时密钥留空可保留原密钥。</p></div><span class="tag">${state.providers.length} 个服务</span></div>${state.providers.length ? `<div class="table-wrap"><table><thead><tr><th>服务名称</th><th>状态</th><th>连接配置</th><th>操作</th></tr></thead><tbody>${providerRows(state.providers, true)}</tbody></table></div>` : empty('添加你的第一个 Search API', '选择搜索服务、填入连接配置，并测试真实搜索。')}</section><div class="note">API Key 保存在服务器中，后台只展示配置状态。启用多个来源后，自动路由根据查询和约束选择服务。</div>`;
+    document.getElementById('add-provider').onclick = () => providerDialog();
+    document.querySelectorAll('[data-provider-edit]').forEach(button => button.onclick = () => providerDialog(state.providers.find(item => item.name === button.dataset.providerEdit)));
+    document.querySelectorAll('[data-provider-test]').forEach(button => button.onclick = () => testDialog(button.dataset.providerTest));
+    document.querySelectorAll('[data-provider-toggle]').forEach(button => button.onclick = async () => {
+      const provider = state.providers.find(item => item.name === button.dataset.providerToggle); busy(button, true);
+      try { await api(`/providers/${encodeURIComponent(provider.name)}`, 'PUT', { name: provider.name, provider: provider.provider, enabled: !provider.enabled, api_key: '', api_base: provider.api_base || '', engines: provider.engines || [], timeout_ms: provider.timeout_ms }); notify('服务状态已更新'); navigate('providers'); }
+      catch (error) { notify(error.message, true); busy(button, false); }
+    });
+    document.querySelectorAll('[data-provider-delete]').forEach(button => button.onclick = () => confirmDialog('删除搜索服务', `确认删除「${button.dataset.providerDelete}」？删除后该服务将不再参与路由。`, async () => { await api(`/providers/${encodeURIComponent(button.dataset.providerDelete)}`, 'DELETE'); navigate('providers'); notify('搜索服务已删除'); }));
+  }
+  function openDialog(title, body) { dialog.innerHTML = `<div class="dialog-head"><h2 id="dialog-title">${escape(title)}</h2><button class="dialog-close" aria-label="关闭对话框" type="button">×</button></div><div class="dialog-body">${body}</div>`; dialog.querySelector('.dialog-close').onclick = () => dialog.close(); if (!dialog.open) dialog.showModal(); }
+  function confirmDialog(title, description, action) {
+    openDialog(title, `<form id="confirm-form"><p>${escape(description)}</p><div class="form-error" role="alert"></div><div class="form-actions"><button class="btn" type="button" id="cancel">取消</button><button class="btn danger" type="submit">确认${title.slice(0, 2)}</button></div></form>`);
+    document.getElementById('cancel').onclick = () => dialog.close();
+    document.getElementById('confirm-form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; busy(form.querySelector('[type=submit]'), true); try { await action(); dialog.close(); } catch (error) { errorBox(form, error); busy(form.querySelector('[type=submit]'), false); } };
+  }
+  function providerDialog(provider) {
+    const editing = Boolean(provider);
+    openDialog(editing ? '编辑 Search API' : '添加 Search API', `<form id="provider-form"><div class="form-error" role="alert"></div><div class="form-row"><div class="field"><label for="provider-name">服务名称</label><input id="provider-name" name="name" required pattern="(?:[a-zA-Z0-9_]|-)+" maxlength="64" value="${escape(provider?.name || '')}" ${editing ? 'disabled' : ''} placeholder="如 searxng-local"><small>使用字母、数字、短横线或下划线。</small></div><div class="field"><label for="provider-type">服务类型</label><select id="provider-type" name="provider" required>${state.catalog.map(item => `<option value="${escape(item.provider)}" ${item.provider === provider?.provider ? 'selected' : ''}>${escape(item.label || item.provider)}</option>`).join('')}</select></div></div><div class="field"><label for="provider-base">API 服务地址</label><input id="provider-base" name="api_base" type="url" value="${escape(provider?.api_base || '')}" placeholder="https://…"><small id="base-hint">留空使用该服务的默认地址。</small></div><div class="field"><label for="provider-key">API Key ${editing && provider.has_api_key ? '（已配置）' : ''}</label><input id="provider-key" name="api_key" type="password" autocomplete="off" placeholder="${editing ? '留空保留原密钥' : '输入服务提供商的 API Key'}"><small id="key-hint"></small></div><div class="form-row"><div class="field"><label for="provider-engines">搜索引擎（可选）</label><input id="provider-engines" name="engines" value="${escape((provider?.engines || []).join(', '))}" placeholder="bing, duckduckgo"><small>仅适用于 SearXNG；多个引擎用逗号分隔。</small></div><div class="field"><label for="provider-timeout">超时时间（ms）</label><input id="provider-timeout" name="timeout_ms" type="number" required min="100" max="60000" step="100" value="${provider?.timeout_ms || 8000}"><small>范围 100–60000 毫秒。</small></div></div><label class="checkbox"><input name="enabled" type="checkbox" ${provider?.enabled !== false ? 'checked' : ''}>启用服务，参与搜索路由</label><div class="form-actions"><button type="button" class="btn" id="provider-cancel">取消</button><button class="btn primary" type="submit">保存配置</button></div></form>`);
+    const select = document.getElementById('provider-type');
+    const updateHints = () => { const item = state.catalog.find(entry => entry.provider === select.value); document.getElementById('provider-base').placeholder = item?.default_api_base || 'https://your-search-service'; document.getElementById('provider-base').required = select.value === 'searxng'; document.getElementById('key-hint').textContent = item?.requires_api_key ? '该服务需要 API Key。密钥不会在列表中显示。' : '该服务通常不需要密钥，可按实际配置填写。'; const engines = document.getElementById('provider-engines'); engines.disabled = select.value !== 'searxng'; };
+    select.onchange = updateHints; updateHints();
+    document.getElementById('provider-cancel').onclick = () => dialog.close();
+    document.getElementById('provider-form').onsubmit = async event => {
+      event.preventDefault(); const form = event.currentTarget; const fields = new FormData(form); const button = form.querySelector('[type=submit]');
+      const payload = { name: editing ? provider.name : fields.get('name'), provider: fields.get('provider'), api_base: fields.get('api_base') || '', api_key: fields.get('api_key') || '', engines: String(fields.get('engines') || '').split(',').map(value => value.trim()).filter(Boolean), timeout_ms: Number(fields.get('timeout_ms')), enabled: fields.has('enabled') };
+      busy(button, true); try { await api(editing ? `/providers/${encodeURIComponent(provider.name)}` : '/providers', editing ? 'PUT' : 'POST', payload); dialog.close(); notify('Search API 配置已保存'); navigate('providers'); } catch (error) { errorBox(form, error); busy(button, false); }
+    };
+  }
+  function testDialog(name) {
+    openDialog(`测试 ${name}`, `<form id="test-form"><p class="muted">发送真实查询，验证配置与搜索结果。</p><div class="field"><label for="test-query">测试查询</label><input id="test-query" name="query" value="Python official documentation" required maxlength="10000"></div><div class="form-error" role="alert"></div><button class="btn primary" type="submit">运行测试</button><div id="test-results" class="test-results" aria-live="polite"></div></form>`);
+    document.getElementById('test-form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('[type=submit]'); busy(button, true); form.querySelector('.form-error').textContent = ''; document.getElementById('test-results').textContent = '正在请求真实搜索服务…'; try { const data = await api(`/providers/${encodeURIComponent(name)}/test`, 'POST', { query: new FormData(form).get('query') }); document.getElementById('test-results').innerHTML = `<div class="note ${data.ok ? '' : 'warning'}">${data.ok ? '连接成功' : '测试失败'} · ${fmt(data.result_count)} 条结果 · ${fmt(Math.round(data.latency_ms || 0))} ms${data.category ? ` · ${escape(data.category)}` : ''}</div>${resultsHtml(data.results || [])}`; requestAnimationFrame(updateSnippetControls); } catch (error) { document.getElementById('test-results').textContent = ''; errorBox(form, error); } finally { busy(button, false); } };
+  }
+  function resultUrl(value) { try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) ? url.href : ''; } catch { return ''; } }
+  function resultsHtml(results) { return results.map((result, index) => { const url = resultUrl(result.url); const snippetId = `result-snippet-${++snippetSequence}`; return `<article class="result"><span class="result-url">${escape(result.url)}</span>${url ? `<a class="result-title" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${index + 1}. ${escape(result.title || result.url)}</a>` : `<span class="result-title">${index + 1}. ${escape(result.title || '无标题')}</span>`}<p class="result-snippet" id="${snippetId}">${escape(result.snippet || result.content || result.description || '')}</p><button class="snippet-toggle" type="button" data-snippet-toggle="${snippetId}" aria-controls="${snippetId}" aria-expanded="false" hidden>展开摘要</button>${result.provider ? `<span class="tag">${escape(result.provider)}</span>` : ''}</article>`; }).join(''); }
+  function renderSearch(main) {
+    main.innerHTML = `${head('search')}<section class="panel"><div class="panel-body"><form id="search-form"><div class="search-bar"><div class="field"><label for="search-query">搜索内容</label><input id="search-query" name="query" required maxlength="10000" placeholder="输入你要搜索的问题或关键词…"></div><button class="btn primary" type="submit">${icon('search')} 执行搜索</button></div><div class="search-options"><div class="field"><label for="search-provider">搜索服务</label><select id="search-provider" name="search_tool_name"><option value="auto">自动智能路由</option>${state.providers.filter(provider => provider.enabled).map(provider => `<option value="${escape(provider.name)}">${escape(provider.name)}</option>`).join('')}</select></div><div class="field"><label for="search-intent">搜索意图</label><select id="search-intent" name="intent">${[['auto', '自动判断'], ['general', '通用搜索'], ['news', '新闻资讯'], ['academic', '学术研究'], ['deep', '深度搜索'], ['coding', '代码开发'], ['people', '人物信息']].map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select></div><div class="field"><label for="search-freshness">时效要求</label><select id="search-freshness" name="freshness">${[['auto', '自动'], ['any', '不限时间'], ['day', '最近一天'], ['week', '最近一周'], ['month', '最近一月'], ['year', '最近一年']].map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select></div><div class="field"><label for="search-count">结果数量</label><input id="search-count" name="max_results" type="number" min="1" max="20" value="10" required></div></div><div class="form-error" role="alert"></div></form></div></section><section class="panel"><div class="panel-head"><h2>搜索结果</h2><span class="results-meta" id="results-meta">等待查询</span></div><div class="panel-body" id="search-results" aria-live="polite">${empty('从一次真实搜索开始', '查询将通过服务器发送给已配置的 Search API。')}</div></section>`;
+    document.getElementById('search-form').onsubmit = async event => {
+      event.preventDefault(); const form = event.currentTarget; const fields = new FormData(form); const button = form.querySelector('[type=submit]'); const revision = state.revision; const started = performance.now();
+      busy(button, true); form.querySelector('.form-error').textContent = ''; document.getElementById('results-meta').textContent = '请求中…'; document.getElementById('search-results').innerHTML = '<p class="muted" role="status">正在查询搜索服务并整理结果…</p>';
+      try {
+        const data = await api('/search', 'POST', { query: fields.get('query'), search_tool_name: fields.get('search_tool_name'), profile: { intent: fields.get('intent') }, constraints: { freshness: fields.get('freshness') }, max_results: Number(fields.get('max_results')), debug: true });
+        if (revision !== state.revision) return;
+        document.getElementById('results-meta').textContent = `${fmt((data.results || []).length)} 条结果 · ${fmt(Math.round(performance.now() - started))} ms`;
+        document.getElementById('search-results').innerHTML = `${data.results?.length ? resultsHtml(data.results) : empty('没有找到结果', '请调整查询，或检查服务测试与执行状态。')}${data.debug ? `<details class="debug"><summary>查看路由与执行详情</summary><pre class="code">${escape(JSON.stringify(data.debug, null, 2))}</pre></details>` : ''}`;
+        requestAnimationFrame(updateSnippetControls);
+      } catch (error) { if (revision !== state.revision) return; errorBox(form, error); document.getElementById('results-meta').textContent = '请求失败'; document.getElementById('search-results').innerHTML = empty('搜索未完成', '检查服务连接与配置后重试。'); }
+      finally { busy(button, false); }
+    };
+  }
+  function renderKeys(main, data) {
+    const keys = data.keys || [];
+    main.innerHTML = `${head('keys', '<button class="btn primary" id="create-key">＋ 创建访问密钥</button>')}<div class="note">每个密钥只在创建时展示一次。请为不同应用创建独立密钥，撤销后立即停止接受该密钥。</div><section class="panel"><div class="panel-head"><h2>我的访问密钥</h2><span class="tag">${keys.filter(key => !key.revoked).length} 个有效密钥</span></div>${keys.length ? `<div class="table-wrap"><table><thead><tr><th>名称 / 密钥前缀</th><th>状态</th><th>创建时间</th><th>最后使用</th><th>操作</th></tr></thead><tbody>${keys.map(key => `<tr><td><strong>${escape(key.name)}</strong><div class="cell-sub">${escape(key.prefix)}…</div></td><td>${status(!key.revoked)}</td><td>${escape(date(key.created_at))}</td><td>${escape(date(key.last_used_at))}</td><td>${key.revoked ? '<span class="muted">已撤销</span>' : `<button class="btn small danger" data-key-revoke="${escape(key.id)}">撤销</button>`}</td></tr>`).join('')}</tbody></table></div>` : empty('还没有访问密钥', '创建密钥后，可通过统一 Search API 接入你的应用。')}</section>`;
+    document.getElementById('create-key').onclick = () => {
+      openDialog('创建访问密钥', '<form id="key-form"><div class="field"><label for="key-name">密钥名称</label><input id="key-name" name="name" required maxlength="100" placeholder="如 My Agent / 开发环境"></div><div class="form-error" role="alert"></div><div class="form-actions"><button class="btn primary" type="submit">创建密钥</button></div></form>');
+      document.getElementById('key-form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('button'); busy(button, true); try { const data = await api('/keys', 'POST', { name: new FormData(form).get('name') }); navigate('keys'); openDialog('请保存你的访问密钥', `<div class="note warning">完整密钥仅展示这一次。关闭后无法再次查看，请保存到安全位置。</div><div class="key-value" id="new-key">${escape(data.key)}</div><div class="form-actions"><button class="btn" id="copy-key">复制密钥</button><button class="btn primary" id="key-done">我已保存</button></div>`); document.getElementById('copy-key').onclick = () => copy(data.key); document.getElementById('key-done').onclick = () => dialog.close(); } catch (error) { errorBox(form, error); busy(button, false); } };
+    };
+    document.querySelectorAll('[data-key-revoke]').forEach(button => button.onclick = () => confirmDialog('撤销访问密钥', '撤销后，使用该密钥的应用将无法继续搜索。此操作无法恢复。', async () => { await api(`/keys/${encodeURIComponent(button.dataset.keyRevoke)}`, 'DELETE'); navigate('keys'); notify('访问密钥已撤销'); }));
+  }
+  function renderUsers(main, data) {
+    const users = data.users || [];
+    main.innerHTML = `${head('users', '<button class="btn primary" id="create-user">＋ 创建用户</button>')}<section class="panel"><div class="panel-head"><h2>后台账号</h2><span class="tag">${users.length} 个用户</span></div><div class="table-wrap"><table><thead><tr><th>用户名</th><th>角色</th><th>创建时间</th><th>操作</th></tr></thead><tbody>${users.map(user => `<tr><td><strong>${escape(user.username)}</strong>${user.id === state.user.id ? '<span class="tag current-account">当前账号</span>' : ''}</td><td>${user.role === 'admin' ? '管理员' : '成员'}</td><td>${escape(date(user.created_at))}</td><td>${user.id !== state.user.id ? `<button class="btn small danger" data-user-delete="${escape(user.id)}" data-username="${escape(user.username)}">删除</button>` : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div></section><div class="note">管理员可配置 Search API 和管理账号。成员可运行搜索、管理自己的访问密钥及修改个人密码。</div>`;
+    document.querySelectorAll('[data-user-delete]').forEach(button => button.onclick = () => confirmDialog('删除后台用户', `确认删除「${button.dataset.username}」？该用户的会话与访问密钥将一并失效。`, async () => { await api(`/users/${encodeURIComponent(button.dataset.userDelete)}`, 'DELETE'); navigate('users'); notify('用户已删除'); }));
+    document.getElementById('create-user').onclick = () => {
+      openDialog('创建后台用户', '<form id="user-form"><div class="field"><label for="new-username">用户名</label><input id="new-username" name="username" required maxlength="64" autocomplete="off" pattern="(?:[a-zA-Z0-9_.]|-)+"><small>使用字母、数字、下划线、点或短横线。</small></div><div class="field"><label for="new-password">初始密码</label><input id="new-password" name="password" type="password" required minlength="12" maxlength="256" autocomplete="new-password"><small>至少 12 个字符，请通过安全渠道提供给该用户。</small></div><div class="field"><label for="new-role">账号角色</label><select id="new-role" name="role"><option value="member">成员</option><option value="admin">管理员</option></select></div><div class="form-error" role="alert"></div><div class="form-actions"><button class="btn primary" type="submit">创建用户</button></div></form>');
+      document.getElementById('user-form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('button'); busy(button, true); try { await api('/users', 'POST', Object.fromEntries(new FormData(form))); dialog.close(); notify('后台用户已创建'); navigate('users'); } catch (error) { errorBox(form, error); busy(button, false); } };
+    };
+  }
+  function renderSettings(main) {
+    main.innerHTML = `${head('settings')}<div class="grid-two"><section class="panel"><div class="panel-head"><h2>修改登录密码</h2></div><div class="panel-body"><form id="password-form"><div class="field"><label for="current-password">当前密码</label><input id="current-password" name="current_password" type="password" autocomplete="current-password" required></div><div class="field"><label for="new-own-password">新密码</label><input id="new-own-password" name="new_password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required><small>至少 12 个字符，建议使用独立的随机密码。</small></div><div class="field"><label for="confirm-password">确认新密码</label><input id="confirm-password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></div><div class="form-error" role="alert"></div><button class="btn primary" type="submit">更新密码</button><p class="section-foot password-note">更新密码后，当前登录会话失效，请重新登录。</p></form></div></section><section class="panel"><div class="panel-head"><h2>账号信息</h2></div><div class="panel-body"><div class="field"><label>用户名</label><p>${escape(state.user.username)}</p></div><div class="field"><label>角色</label><p>${admin() ? '管理员 · 可管理搜索服务与用户' : '成员 · 可搜索与管理个人密钥'}</p></div></div></section></div>`;
+    document.getElementById('password-form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('button'); if (document.getElementById('new-own-password').value !== document.getElementById('confirm-password').value) { errorBox(form, new Error('两次输入的新密码不一致')); return; } busy(button, true); try { await api('/password', 'POST', Object.fromEntries(new FormData(form))); state.user = null; state.csrf = ''; login(); notify('密码已更新，请使用新密码登录'); } catch (error) { errorBox(form, error); busy(button, false); } };
+  }
+  async function copy(value) { try { if (!navigator.clipboard) throw new Error(); await navigator.clipboard.writeText(value); notify('已复制到剪贴板'); } catch { notify('无法访问剪贴板，请选中文本手动复制', true); } }
+  function renderIntegration(main) {
+    const endpoint = `${location.origin}/search`;
+    const curl = `curl '${endpoint}' \\\n  -H 'Authorization: Bearer YOUR_API_KEY' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"query":"Python official documentation","search_tool_name":"auto","max_results":10}'`;
+    const python = `import os\nimport requests\n\nresponse = requests.post(\n    "${endpoint}",\n    headers={"Authorization": f"Bearer {os.environ['SEARCH_API_KEY']}"},\n    json={"query": "Python official documentation", "search_tool_name": "auto"},\n    timeout=65,\n)\nresponse.raise_for_status()\nfor result in response.json()["results"]:\n    print(result["title"], result["url"])`;
+    main.innerHTML = `${head('integration', '<button class="btn" id="integration-key">管理访问密钥 →</button>')}<div class="note">通过 POST 调用搜索接口，并在 Authorization 请求头中提供你的访问密钥。浏览器地址栏不能直接发送搜索请求。</div><section class="panel"><div class="panel-head"><div><h2>cURL</h2><p>将 YOUR_API_KEY 替换为你创建的访问密钥</p></div><button class="btn small" id="copy-curl">复制示例</button></div><div class="panel-body"><pre class="code">${escape(curl)}</pre></div></section><section class="panel"><div class="panel-head"><h2>Python</h2><button class="btn small" id="copy-python">复制示例</button></div><div class="panel-body"><pre class="code">${escape(python)}</pre></div></section><section class="panel"><div class="panel-head"><h2>请求参数</h2><a class="btn small" href="/api/docs" target="_blank" rel="noopener noreferrer">完整 API 文档 ↗</a></div><div class="table-wrap"><table><thead><tr><th>参数</th><th>说明</th></tr></thead><tbody><tr><td>query</td><td>搜索关键词或自然语言问题，必填</td></tr><tr><td>search_tool_name</td><td>auto 自动路由，或指定已启用的服务名称</td></tr><tr><td>max_results</td><td>返回结果数量，1–20，默认 10</td></tr><tr><td>profile.intent</td><td>auto / general / news / academic / deep / coding / people</td></tr><tr><td>constraints</td><td>时效、成本、延迟与来源多样性等约束</td></tr><tr><td>debug</td><td>设为 true 返回路由与服务执行详情</td></tr></tbody></table></div></section>`;
+    document.getElementById('copy-curl').onclick = () => copy(curl); document.getElementById('copy-python').onclick = () => copy(python); document.getElementById('integration-key').onclick = () => navigate('keys');
+  }
+  async function initialize() { try { const data = await api('/session'); state.user = data.user; state.csrf = data.csrf_token; shell(); await navigate('overview'); } catch { login(); } }
+  initialize();
+})();

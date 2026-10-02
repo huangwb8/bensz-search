@@ -1,0 +1,21 @@
+model_list: []
+search_tools:
+  - search_tool_name: exa
+    litellm_params: {search_provider: exa_ai, api_key: os.environ/EXA_API_KEY}
+  - search_tool_name: brave
+    litellm_params: {search_provider: brave, api_key: os.environ/BRAVE_API_KEY}
+  - search_tool_name: tavily
+    litellm_params: {search_provider: tavily, api_key: os.environ/TAVILY_API_KEY}
+  - search_tool_name: serper
+    litellm_params: {search_provider: serper, api_key: os.environ/SERPER_API_KEY}
+  - search_tool_name: perplexity
+    litellm_params: {search_provider: perplexity, api_key: os.environ/PERPLEXITY_API_KEY}
+  - search_tool_name: searxng
+    litellm_params: {search_provider: searxng, api_base: os.environ/SEARXNG_API_BASE, engines: os.environ/SEARXNG_ENGINES}
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  disable_spend_logs: true
+litellm_settings:
+  turn_off_message_logging: true
+router_settings:
+  num_retries: 0

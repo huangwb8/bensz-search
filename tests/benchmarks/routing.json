@@ -1,0 +1,1552 @@
+[
+  {
+    "id": "general-01",
+    "query": "capital of France",
+    "expected_intent": "general",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "general-02",
+    "query": "how to boil an egg",
+    "expected_intent": "general",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "general-03",
+    "query": "distance between Earth and Moon",
+    "expected_intent": "general",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "general-04",
+    "query": "best time to plant tomatoes",
+    "expected_intent": "general",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "general-05",
+    "query": "what is photosynthesis",
+    "expected_intent": "general",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "general-06",
+    "query": "history of the printing press",
+    "expected_intent": "general",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "general-07",
+    "query": "population of Canada",
+    "expected_intent": "general",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "general-08",
+    "query": "why is the sky blue",
+    "expected_intent": "general",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "general-09",
+    "query": "如何煮米饭",
+    "expected_intent": "general",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "general-10",
+    "query": "光合作用是什么",
+    "expected_intent": "general",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "academic-01",
+    "query": "ctDNA guided adjuvant colorectal cancer clinical trial",
+    "expected_intent": "academic",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "academic-02",
+    "query": "randomized trial of GLP-1 cardiovascular outcomes",
+    "expected_intent": "academic",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "academic-03",
+    "query": "PubMed literature on immune checkpoint inhibitors",
+    "expected_intent": "academic",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "academic-04",
+    "query": "primary literature on protein folding",
+    "expected_intent": "academic",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "academic-05",
+    "query": "arxiv papers on graph neural networks",
+    "expected_intent": "academic",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "academic-06",
+    "query": "academic evidence for climate sensitivity",
+    "expected_intent": "academic",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "academic-07",
+    "query": "biomedical cancer screening studies",
+    "expected_intent": "academic",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "academic-08",
+    "query": "scholar articles on causal inference",
+    "expected_intent": "academic",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "academic-09",
+    "query": "结直肠癌临床试验证据",
+    "expected_intent": "academic",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "academic-10",
+    "query": "肿瘤免疫治疗论文",
+    "expected_intent": "academic",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "news-01",
+    "query": "OpenAI launched today",
+    "expected_intent": "news",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "news-02",
+    "query": "breaking news on AI regulation",
+    "expected_intent": "news",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "news-03",
+    "query": "latest news about semiconductor exports",
+    "expected_intent": "news",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "news-04",
+    "query": "headlines on energy prices today",
+    "expected_intent": "news",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "news-05",
+    "query": "what happened in markets yesterday",
+    "expected_intent": "news",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "news-06",
+    "query": "current events in Europe",
+    "expected_intent": "news",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "news-07",
+    "query": "new satellite announced this week",
+    "expected_intent": "news",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "news-08",
+    "query": "who released a new model today",
+    "expected_intent": "news",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "news-09",
+    "query": "今天人工智能新闻",
+    "expected_intent": "news",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "news-10",
+    "query": "突发最新消息",
+    "expected_intent": "news",
+    "expected_provider": {
+      "any_of": [
+        "brave",
+        "serper",
+        "tavily",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "brave",
+      "serper",
+      "tavily",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "coding-01",
+    "query": "LiteLLM search router source code",
+    "expected_intent": "coding",
+    "expected_provider": {
+      "any_of": [
+        "serper",
+        "brave"
+      ]
+    },
+    "preferred": [
+      "serper",
+      "brave"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "coding-02",
+    "query": "Python asyncio documentation",
+    "expected_intent": "coding",
+    "expected_provider": {
+      "any_of": [
+        "serper",
+        "brave"
+      ]
+    },
+    "preferred": [
+      "serper",
+      "brave"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "coding-03",
+    "query": "Rust ownership API reference",
+    "expected_intent": "coding",
+    "expected_provider": {
+      "any_of": [
+        "serper",
+        "brave"
+      ]
+    },
+    "preferred": [
+      "serper",
+      "brave"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "coding-04",
+    "query": "GitHub FastAPI SDK examples",
+    "expected_intent": "coding",
+    "expected_provider": {
+      "any_of": [
+        "serper",
+        "brave"
+      ]
+    },
+    "preferred": [
+      "serper",
+      "brave"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "coding-05",
+    "query": "debug Javascript memory leak",
+    "expected_intent": "coding",
+    "expected_provider": {
+      "any_of": [
+        "serper",
+        "brave"
+      ]
+    },
+    "preferred": [
+      "serper",
+      "brave"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "coding-06",
+    "query": "Docker multi-stage build documentation",
+    "expected_intent": "coding",
+    "expected_provider": {
+      "any_of": [
+        "serper",
+        "brave"
+      ]
+    },
+    "preferred": [
+      "serper",
+      "brave"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "coding-07",
+    "query": "Kubernetes service API reference",
+    "expected_intent": "coding",
+    "expected_provider": {
+      "any_of": [
+        "serper",
+        "brave"
+      ]
+    },
+    "preferred": [
+      "serper",
+      "brave"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "coding-08",
+    "query": "SQL programming window functions",
+    "expected_intent": "coding",
+    "expected_provider": {
+      "any_of": [
+        "serper",
+        "brave"
+      ]
+    },
+    "preferred": [
+      "serper",
+      "brave"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "coding-09",
+    "query": "如何读源码",
+    "expected_intent": "coding",
+    "expected_provider": {
+      "any_of": [
+        "serper",
+        "brave"
+      ]
+    },
+    "preferred": [
+      "serper",
+      "brave"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "coding-10",
+    "query": "编程接口开发文档",
+    "expected_intent": "coding",
+    "expected_provider": {
+      "any_of": [
+        "serper",
+        "brave"
+      ]
+    },
+    "preferred": [
+      "serper",
+      "brave"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "people-01",
+    "query": "who is Ada Lovelace",
+    "expected_intent": "people",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "serper",
+        "tavily"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "serper",
+      "tavily"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity"
+    ],
+    "invalid": [
+      "searxng"
+    ]
+  },
+  {
+    "id": "people-02",
+    "query": "biography of Alan Turing",
+    "expected_intent": "people",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "serper",
+        "tavily"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "serper",
+      "tavily"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity"
+    ],
+    "invalid": [
+      "searxng"
+    ]
+  },
+  {
+    "id": "people-03",
+    "query": "LinkedIn profile of a biomedical scientist",
+    "expected_intent": "people",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "serper",
+        "tavily"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "serper",
+      "tavily"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity"
+    ],
+    "invalid": [
+      "searxng"
+    ]
+  },
+  {
+    "id": "people-04",
+    "query": "founder of Stripe",
+    "expected_intent": "people",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "serper",
+        "tavily"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "serper",
+      "tavily"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity"
+    ],
+    "invalid": [
+      "searxng"
+    ]
+  },
+  {
+    "id": "people-05",
+    "query": "CEO of NVIDIA",
+    "expected_intent": "people",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "serper",
+        "tavily"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "serper",
+      "tavily"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity"
+    ],
+    "invalid": [
+      "searxng"
+    ]
+  },
+  {
+    "id": "people-06",
+    "query": "profile of Marie Curie",
+    "expected_intent": "people",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "serper",
+        "tavily"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "serper",
+      "tavily"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity"
+    ],
+    "invalid": [
+      "searxng"
+    ]
+  },
+  {
+    "id": "people-07",
+    "query": "author biography of Ursula Le Guin",
+    "expected_intent": "people",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "serper",
+        "tavily"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "serper",
+      "tavily"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity"
+    ],
+    "invalid": [
+      "searxng"
+    ]
+  },
+  {
+    "id": "people-08",
+    "query": "researcher profile contact details",
+    "expected_intent": "people",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "serper",
+        "tavily"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "serper",
+      "tavily"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity"
+    ],
+    "invalid": [
+      "searxng"
+    ]
+  },
+  {
+    "id": "people-09",
+    "query": "图灵人物履历",
+    "expected_intent": "people",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "serper",
+        "tavily"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "serper",
+      "tavily"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity"
+    ],
+    "invalid": [
+      "searxng"
+    ]
+  },
+  {
+    "id": "people-10",
+    "query": "公司创始人个人简介",
+    "expected_intent": "people",
+    "expected_provider": {
+      "any_of": [
+        "exa",
+        "serper",
+        "tavily"
+      ]
+    },
+    "preferred": [
+      "exa",
+      "serper",
+      "tavily"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity"
+    ],
+    "invalid": [
+      "searxng"
+    ]
+  },
+  {
+    "id": "deep-01",
+    "query": "comprehensive landscape of carbon removal",
+    "expected_intent": "deep",
+    "expected_provider": {
+      "any_of": [
+        "tavily",
+        "exa",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "tavily",
+      "exa",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "deep-02",
+    "query": "deep research on autonomous agents",
+    "expected_intent": "deep",
+    "expected_provider": {
+      "any_of": [
+        "tavily",
+        "exa",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "tavily",
+      "exa",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "deep-03",
+    "query": "systematic review of ctDNA treatment strategies",
+    "expected_intent": "deep",
+    "expected_provider": {
+      "any_of": [
+        "tavily",
+        "exa",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "tavily",
+      "exa",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "deep-04",
+    "query": "exhaustive analysis of battery recycling",
+    "expected_intent": "deep",
+    "expected_provider": {
+      "any_of": [
+        "tavily",
+        "exa",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "tavily",
+      "exa",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "deep-05",
+    "query": "in-depth comparison of fusion energy approaches",
+    "expected_intent": "deep",
+    "expected_provider": {
+      "any_of": [
+        "tavily",
+        "exa",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "tavily",
+      "exa",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "deep-06",
+    "query": "compare all renewable storage technologies",
+    "expected_intent": "deep",
+    "expected_provider": {
+      "any_of": [
+        "tavily",
+        "exa",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "tavily",
+      "exa",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "deep-07",
+    "query": "comprehensive literature on antibiotic resistance",
+    "expected_intent": "deep",
+    "expected_provider": {
+      "any_of": [
+        "tavily",
+        "exa",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "tavily",
+      "exa",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "deep-08",
+    "query": "deep research into semiconductor supply chains",
+    "expected_intent": "deep",
+    "expected_provider": {
+      "any_of": [
+        "tavily",
+        "exa",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "tavily",
+      "exa",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "deep-09",
+    "query": "全面调研可再生能源",
+    "expected_intent": "deep",
+    "expected_provider": {
+      "any_of": [
+        "tavily",
+        "exa",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "tavily",
+      "exa",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  },
+  {
+    "id": "deep-10",
+    "query": "深入研究并完成系统综述",
+    "expected_intent": "deep",
+    "expected_provider": {
+      "any_of": [
+        "tavily",
+        "exa",
+        "perplexity"
+      ]
+    },
+    "preferred": [
+      "tavily",
+      "exa",
+      "perplexity"
+    ],
+    "acceptable": [
+      "exa",
+      "brave",
+      "tavily",
+      "serper",
+      "perplexity",
+      "searxng"
+    ],
+    "invalid": []
+  }
+]

@@ -1,0 +1,51 @@
+# Tunable priors, NOT measured provider quality. Estimated USD per request at <=20 results.
+providers:
+  exa:
+    provider: exa_ai
+    source_family: exa
+    capabilities: {general: 0.70, news: 0.60, academic: 0.95, deep: 0.90, people: 0.95, coding: 0.70, semantic: 0.95, keyword: 0.60, freshness: 0.70, authority: 0.90}
+    features: [neural_search, contents]
+    cost_class: medium
+    latency_class: medium
+    estimated_cost_usd: 0.007
+  brave:
+    provider: brave
+    source_family: brave
+    capabilities: {general: 0.95, news: 0.95, academic: 0.65, deep: 0.75, people: 0.65, coding: 0.85, semantic: 0.50, keyword: 0.95, freshness: 0.95, authority: 0.75}
+    features: [web_search, freshness]
+    cost_class: low
+    latency_class: low
+    estimated_cost_usd: 0.005
+  tavily:
+    provider: tavily
+    source_family: tavily_aggregate
+    capabilities: {general: 0.85, news: 0.85, academic: 0.85, deep: 0.95, people: 0.70, coding: 0.80, semantic: 0.90, keyword: 0.80, freshness: 0.90, authority: 0.85}
+    features: [agent_search]
+    cost_class: medium
+    latency_class: medium
+    estimated_cost_usd: 0.008
+  serper:
+    provider: serper
+    source_family: google
+    capabilities: {general: 0.95, news: 0.90, academic: 0.75, deep: 0.80, people: 0.80, coding: 0.95, semantic: 0.55, keyword: 0.95, freshness: 0.90, authority: 0.80}
+    features: [serp]
+    cost_class: low
+    latency_class: low
+    estimated_cost_usd: 0.002
+  perplexity:
+    provider: perplexity
+    source_family: perplexity_aggregate
+    capabilities: {general: 0.85, news: 0.85, academic: 0.85, deep: 0.90, people: 0.60, coding: 0.70, semantic: 0.85, keyword: 0.75, freshness: 0.85, authority: 0.85}
+    features: [web_search]
+    cost_class: medium
+    latency_class: medium
+    estimated_cost_usd: 0.005
+  searxng:
+    provider: searxng
+    # Default conservative: public instances may include Google. Set according to actual engines.
+    source_family: google
+    capabilities: {general: 0.80, news: 0.65, academic: 0.65, deep: 0.70, people: 0.50, coding: 0.75, semantic: 0.30, keyword: 0.85, freshness: 0.65, authority: 0.60}
+    features: [metasearch]
+    cost_class: low
+    latency_class: medium
+    estimated_cost_usd: 0.0

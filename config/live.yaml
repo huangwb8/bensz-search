@@ -1,0 +1,15 @@
+# Real, keyless demo against an operator-managed SearXNG instance.
+model_list: []
+search_tools:
+  - search_tool_name: searxng
+    litellm_params:
+      search_provider: searxng
+      api_base: os.environ/SEARXNG_API_BASE
+      engines: github,pubmed
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  disable_spend_logs: true
+litellm_settings:
+  turn_off_message_logging: true
+router_settings:
+  num_retries: 0

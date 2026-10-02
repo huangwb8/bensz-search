@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bensz-search"
+version = "0.2.0"
+description = "Task-aware smart search control plane for the LiteLLM gateway"
+requires-python = ">=3.11,<3.14"
+dependencies = ["litellm[proxy]==1.103.2", "httpx>=0.28,<0.29", "pyyaml>=6,<7", "pydantic>=2.11,<3", "uvicorn>=0.30,<1", "prisma==0.15.0", "cryptography>=49,<51"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2", "ruff>=0.11,<1", "bensz-auto-contribution @ git+https://github.com/huangwb8/bensz-auto-contribution.git@52b007919e1c28f2211a874e8323944538942512"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bensz_search"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+ignore = ["B008"]
+
+[tool.hatch.metadata]
+allow-direct-references = true

@@ -1,0 +1,35 @@
+name: bensz-search
+services:
+  search:
+    image: bensz-search:0.2.0
+    build:
+      context: ../..
+      dockerfile: docs/deploy/Dockerfile
+    ports:
+      - "127.0.0.1:${BENSZ_SEARCH_PORT:-8898}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      BENSZ_SEARCH_CONFIG: config/litellm.yaml
+      BENSZ_SEARCH_CAPABILITIES: config/capabilities.yaml
+      BENSZ_SEARCH_MODE: production
+      BENSZ_SEARCH_DATA_DIR: /app/data
+    volumes:
+      - search-data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+volumes:
+  search-data:
