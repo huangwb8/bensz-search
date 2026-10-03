@@ -68,3 +68,31 @@ docker compose -f docs/deploy/compose.yaml start search
 `/health/liveliness` 是进程检查；`/ready` 是配置检查；后台“测试”才验证外部检索。当前已通过的本机验收见 [production-verification.md](../smart-search-router/production-verification.md)。商业源无凭据时只验证配置链路，公网 TLS、多节点和原生 LiteLLM DB 模式未验收。
 
 2026-10-02 部署目录迁移验证：生产、fixture 和 live 的 Compose 配置均可解析；生产服务参数、环境变量名、端口和数据卷与迁移前一致。部署目录 `.env` 的读取和端口变量插值、脚本的幂等初始化及文件权限、迁移后的 Docker 镜像构建均通过。私有配置迁移时校验了文件内容与权限，继续被 Git 和构建上下文忽略。
+
+## 全球搜索协议与 MCP
+
+新版镜像提供 HTTP `/bensz-search/v1/capabilities` 与 `/bensz-search/v1/search`，以及独立 MCP `/bensz-search/mcp/`。应用 Key 可访问这些入口；后台仍需登录会话。先读[协议与接入教程](../smart-search-router/protocol/README.md)，不要把 MCP URL 当作直接 HTTP API 根地址。
+
+默认最多 10 个物理调用（包括 fallback），每请求 3 个并发，每租户 4 个同时搜索请求、每分钟 60 个搜索请求；单条片段 2000 字符，结果体 128000 字节。环境变量列于 `.env.example`。默认单进程，进程内限流和熔断没有跨实例共享；不要仅增加 uvicorn workers 来扩大承诺容量。Docker 网关并发限制 64、内存 1GB 是部署保护边界，不能当成已验证的真实 provider 吞吐量。
+
+远程部署在网关前配置 HTTPS，保留 Authorization、MCP-Protocol-Version、Accept 和 Content-Type。反向代理请求体上限至少 128KB，读超时应高于最长 provider 期限（建议 75 秒）；禁用 MCP 位置的代理缓冲。配置 `BENSZ_SEARCH_MCP_ALLOWED_HOSTS` 为实际公网 Host（有端口时包含端口），浏览器宿主还需将实际 Origin 加入 `BENSZ_SEARCH_MCP_ALLOWED_ORIGINS`。不开放任意 wildcard origin 或带凭据的公共 CORS。
+
+```nginx
+location /bensz-search/ {
+    proxy_pass http://127.0.0.1:8898;
+    proxy_set_header Host $http_host;
+    proxy_set_header Authorization $http_authorization;
+    proxy_set_header MCP-Protocol-Version $http_mcp_protocol_version;
+    proxy_read_timeout 75s;
+    proxy_buffering off;
+    client_max_body_size 128k;
+}
+```
+
+选择靠近用户和搜索源的区域，分别验证模型渠道与 provider 的地域可达性；不自动翻译用户 query，不用 country 替代语言。不同区域实例拥有自己的 URL、访问密钥和轻量存储。当前没有多实例状态共享需求的实测依据，保持单实例状态边界；扩容前测量真实 p50/p95、限流、来源覆盖及供应商账单，再决定共享机制。
+
+保留凭据加密及 SQLite 数据卷备份策略。日志/指标不记录查询或结果正文；没有服务器搜索结果缓存。应用宿主负责对话数据保留、模型请求内容和客户端能力缓存；搜索源有自己的数据处理政策。公开 Web 应用通过后端请求，桌面应用使用系统安全存储，不能内置共享 provider/管理员密钥。
+
+`BENSZ_SEARCH_MCP_ENABLED=false` 只停用 MCP；`BENSZ_SEARCH_PROTOCOL_ENABLED=false` 停用新搜索业务入口。旧原生搜索继续可用。未知结果的计费请求不会自动重放，目前没有持久任务恢复或幂等计费承诺。
+
+独立 Docker + HTTP/MCP 真实 SearXNG 验收与模拟性能基线见[验证报告](../smart-search-router/protocol/verification.md)。模型凭据缺失时只标注离线契约通过，不能据此发布“全部模型兼容”。
