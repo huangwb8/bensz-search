@@ -92,4 +92,4 @@
 
 实施建议见 [全球主流 LLM 搜索接入协议优化计划](../plans/2026-10-03-global-llm-search-protocol.md)。
 
-任务开始的主账本校验失败：既有事件导致 `project.root_hash changed within ledger`。本次保留 `docs/contribution.bac` 历史，贡献记录在 `docs/contribution-protocol-audit.bac`；主账本修复不属于本次协议规划，不把独立账本通过当作主账本通过。
+协议审计任务开始时，主账本曾因 `project.root_hash changed within ledger` 校验失败，因此阶段性记录暂存独立账本。后续检查确认同一仓库 remote 变化导致身份冲突，新增记录沿用主账本初始身份并披露当前上下文哈希。账本整理时已将独立账本的完整历史归入 [唯一贡献账本](../contribution.bac)，删除独立文件；主账本校验无错误，原有历史保持不变。

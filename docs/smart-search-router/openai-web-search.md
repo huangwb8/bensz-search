@@ -44,4 +44,4 @@
 
 LiteLLM 锁定 1.103.2，SearchProviders 不含 OpenAI，项目独立适配 `litellm.aresponses`，未修改 upstream。官方协议已于 2026-10-03 读取：[OpenAI Web search](https://developers.openai.com/api/docs/guides/tools-web-search)。测试覆盖 LiteLLM 实际 Responses HTTP 请求与模拟响应，以及后台配置、原生四种搜索入口、权限、超时、来源转换和 fallback。全量 107 项测试、Docker 镜像与隔离端到端、浏览器交互通过，详见 [验收记录](openai-web-search-verification.md)。没有进行真实付费 OpenAI 调用，账号权限及外部可用性以后台连接测试为准。
 
-主 BAC 账本初期因仓库 remote 改变而出现根哈希冲突，阶段性证据保存在 [独立 BAC 账本](../contribution-openai-web-search.bac)。本次沿用原账本项目身份，并在新增事件中披露当前上下文哈希，向 [主账本](../contribution.bac) 记录需求及交付汇总；仅纠正本任务新输入事件的身份绑定，此前历史保持不变。两份账本校验无错误。
+主 BAC 账本初期因仓库 remote 改变而出现根哈希冲突，阶段性证据曾暂存独立账本。本次沿用原账本项目身份，并在新增事件中披露当前上下文哈希，记录需求及交付汇总；仅纠正本任务新输入事件的身份绑定，此前历史保持不变。后续账本整理已将阶段性完整历史归入 [唯一贡献账本](../contribution.bac)，删除独立文件；主账本校验无错误。

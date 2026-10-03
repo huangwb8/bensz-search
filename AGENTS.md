@@ -92,12 +92,13 @@
 
 ## 贡献记录
 
-本项目默认且强制基于 [bensz-auto-contribution](https://github.com/huangwb8/bensz-auto-contribution) 使用 `bac` 工具，客观记录人类与 AI 的协作贡献边界；默认贡献托管文件为 `docs/contribution.bac`；初始化项目时必须检查 Python 环境、确认 `bac` 包可用；若环境未配置好，必须自动安装该 Python 依赖并初始化账本。
+本项目默认且强制基于 [bensz-auto-contribution](https://github.com/huangwb8/bensz-auto-contribution) 使用 `bac` 工具，客观记录人类与 AI 的协作贡献边界；唯一正式贡献账本为 `docs/contribution.bac`，所有任务统一追加，不另建任务级账本；初始化项目时必须检查 Python 环境、确认 `bac` 包可用；若环境未配置好，必须自动安装该 Python 依赖并初始化账本。
 
 - BAC 是默认强制执行步骤；除非项目负责人明确要求使用脚本级 `--disable-bac` 逃生开关，否则不得跳过依赖检查、安装与账本初始化
 - 记录应忠实反映需求来源、AI 生成内容、工具执行结果、人工确认、文件改动与验证证据
 - 不把 BAC 当作最终署名或责任裁判；它是过程记录与辅助审计材料
 - 使用项目内 Python 环境安装依赖，不写入系统或用户级环境；维护任务开始和交付前验证账本
+- 同一仓库因 remote 变化导致身份校验冲突时，沿用主账本初始项目身份，并在新增事件中披露当前上下文哈希；保留旧历史，备份与排查材料放入任务工作区，不在 `docs/` 新建独立账本
 - 保留已有历史，追加当前需求、AI 产出、工具结果、文件变更和验证摘要；不得把 AI 判断记为人工确认
 - 不记录 API Key、令牌、密码、Cookie、环境/凭据文件、私有 Prompt、身份信息、本地用户名、主机名或无关大体积原始数据
 
