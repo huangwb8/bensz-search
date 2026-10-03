@@ -24,6 +24,8 @@ python docs/deploy/deploy_local.py
 
 后台支持 **OpenAI Web Search、Exa、Brave、Tavily、Serper、Perplexity、SearXNG**。可配置多条同类型服务，名称必须唯一。每条配置可编辑地址、凭据、引擎及超时，启停或删除；保存后立即用于新的搜索请求，无需重启。
 
+逐步操作见 [搜索 API 添加教程](docs/search-api-setup.md)：包含各供应商的 Key 申请入口、字段填写值、连接测试、应用调用示例与常见错误处理。
+
 - 商业服务需要真实 API Key；地址留空使用原生 adapter 默认值。
 - OpenAI 使用 Responses `web_search`；默认模型 `gpt-4.1-mini`，支持模型、搜索上下文及输出上限设置。地址留空使用 `https://api.openai.com/v1`，结果标记 AI 生成摘要，建议超时 30000ms。详见 [OpenAI 接入说明](docs/smart-search-router/openai-web-search.md)。
 - SearXNG 需要服务地址及 JSON 输出，可指定逗号分隔的引擎。管理员可以连接内网实例。

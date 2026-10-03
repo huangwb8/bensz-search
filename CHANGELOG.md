@@ -8,6 +8,8 @@
 - 增加 OpenAI Responses `web_search` 项目适配器，支持后台加密配置、模型/上下文/输出上限、连接测试、显式搜索与自动路由/融合/fallback；提取真实引用及来源、URL 去重、域名/地区过滤，标记生成摘要，保持 `/search` 响应兼容。
 - 补充 OpenAI 协议与鉴权回归测试、配置示例、源码审计及 Docker/浏览器验收记录。
 
+- 新增 Exa、Brave、Tavily、Serper、Perplexity 与 SearXNG 的搜索 API 添加教程，说明密钥获取、后台字段、地址规则、连接验证、首次导入及应用调用，并在 README 和部署说明添加入口。
+
 ### Changed
 
 - 新功能版本更新为 0.3.0；后台显式调试请求传递统一域名、地区及页面 token 参数；服务启停保留 OpenAI 模型和输出限制。
