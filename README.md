@@ -118,6 +118,7 @@ LITELLM_MASTER_KEY=sk-bensz-search-local-demo \
 
 ## 文档与边界
 
+- [跨模型协议现状审计](docs/smart-search-router/protocol-readiness-audit.md)与[全球主流 LLM 接入优化计划](docs/plans/2026-10-03-global-llm-search-protocol.md)：面向模型无关的 HTTP/JSON、应用内置接入代码、用户仅配置 URL/Key；能力发现、外部 AI 分引擎查询计划与跨模型适配仍为拟议能力。
 - [Upstream 审计](docs/smart-search-router/architecture-audit.md)、[设计](docs/smart-search-router/proposed-design.md)、[当前实施计划](docs/plans/2026-10-02-production-admin.md)。
 - 六意图：general、news、academic、deep、people、coding。profile_prompt 使用有限规则，未提供完整自然语言 planner。
 - 预估成本是配置先验，不是供应商账单；严格 freshness 过滤无日期结果；authority 是排序偏好，不能保证证据等级。
