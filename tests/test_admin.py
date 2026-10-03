@@ -21,7 +21,14 @@ def console(monkeypatch, tmp_path):
     monkeypatch.setenv("SEARXNG_API_BASE", "http://localhost:8080")
     monkeypatch.setenv("SEARXNG_ENGINES", "github,pubmed")
     monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
-    for key in ("EXA_API_KEY", "BRAVE_API_KEY", "TAVILY_API_KEY", "SERPER_API_KEY", "PERPLEXITY_API_KEY"):
+    for key in (
+        "EXA_API_KEY",
+        "BRAVE_API_KEY",
+        "TAVILY_API_KEY",
+        "SERPER_API_KEY",
+        "PERPLEXITY_API_KEY",
+        "OPENAI_API_KEY",
+    ):
         monkeypatch.delenv(key, raising=False)
     from bensz_search.server import app
 
@@ -122,6 +129,85 @@ def test_provider_crud_and_live_runtime(console):
     assert console.get("/ready").status_code == 503
     assert console.post("/admin/api/search", json={"query": "test"}, headers=headers).status_code == 503
     assert console.get("/admin/api/session").status_code == 200
+
+
+def test_openai_configuration_test_native_paths_and_auto(console, monkeypatch):
+    import litellm
+    from test_openai_search import web_response
+
+    headers = login(console)
+    calls = []
+
+    async def responses(**kwargs):
+        calls.append(kwargs)
+        return web_response()
+
+    monkeypatch.setattr(litellm, "aresponses", responses)
+    body = {
+        "name": "openai-main",
+        "provider": "openai",
+        "api_key": "openai-server-secret",
+        "api_base": "https://configured.example/v1",
+        "search_model": "gpt-4.1-mini",
+        "search_context_size": "low",
+        "max_output_tokens": 1024,
+        "timeout_ms": 30000,
+    }
+    assert console.post("/admin/api/providers", headers=headers, json=body).status_code == 200
+    public = console.get("/admin/api/providers")
+    assert "openai-server-secret" not in public.text
+    assert any(row["provider"] == "openai" for row in public.json()["catalog"])
+    result = console.post(
+        "/admin/api/providers/openai-main/test", headers=headers, json={"query": "Python docs"}
+    )
+    assert result.json()["ok"], result.text
+    body.update(api_key="", enabled=False)
+    assert console.put("/admin/api/providers/openai-main", headers=headers, json=body).status_code == 200
+    assert "openai-main" not in console.app.state.admin_runtime.active_names()
+    assert console.post("/admin/api/providers/openai-main/test", headers=headers, json={}).json()["ok"]
+    body["enabled"] = True
+    assert console.put("/admin/api/providers/openai-main", headers=headers, json=body).status_code == 200
+    assert console.delete("/admin/api/providers/searxng", headers=headers).status_code == 200
+    key = console.post("/admin/api/keys", headers=headers, json={"name": "openai-app"}).json()["key"]
+    auth = {"Authorization": "Bearer " + key}
+    for path in ("/search", "/v1/search", "/search/openai-main", "/v1/search/openai-main"):
+        result = console.post(
+            path,
+            headers=auth,
+            json={"query": "Python docs", "search_tool_name": "openai-main", "max_results": 1},
+        )
+        assert result.status_code == 200, result.text
+        assert result.json()["object"] == "search" and len(result.json()["results"]) == 1
+    result = console.post("/search", headers=auth, json={"query": "Python docs", "debug": True})
+    assert result.status_code == 200, result.text
+    assert result.json()["debug"]["providers"] == ["openai-main"]
+    result = console.post(
+        "/admin/api/search",
+        headers=headers,
+        json={
+            "query": "Python docs",
+            "search_tool_name": "openai-main",
+            "search_domain_filter": ["docs.python.org"],
+            "country": "GB",
+        },
+    )
+    assert result.status_code == 200 and len(result.json()["results"]) == 1
+    assert calls[-1]["tools"][0]["user_location"]["country"] == "GB"
+    assert all(call["api_key"] == "openai-server-secret" for call in calls)
+    assert console.post("/search/openai-main", json={"query": "q"}).status_code == 401
+    assert (
+        console.post(
+            "/search/openai-main", headers=auth, json={"query": "q", "api_base": "https://evil.example"}
+        ).status_code
+        == 422
+    )
+    assert (
+        console.delete(
+            "/admin/api/keys/" + console.get("/admin/api/keys").json()["keys"][0]["id"], headers=headers
+        ).status_code
+        == 200
+    )
+    assert console.post("/search/openai-main", headers=auth, json={"query": "q"}).status_code == 401
 
 
 def test_search_access_keys_and_revocation(console):

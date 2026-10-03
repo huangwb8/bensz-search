@@ -22,9 +22,10 @@ python docs/deploy/deploy_local.py
 
 ### 配置不同 Search API
 
-后台支持 **Exa、Brave、Tavily、Serper、Perplexity、SearXNG**。可配置多条同类型服务，名称必须唯一。每条配置可编辑地址、凭据、引擎及超时，启停或删除；保存后立即用于新的搜索请求，无需重启。
+后台支持 **OpenAI Web Search、Exa、Brave、Tavily、Serper、Perplexity、SearXNG**。可配置多条同类型服务，名称必须唯一。每条配置可编辑地址、凭据、引擎及超时，启停或删除；保存后立即用于新的搜索请求，无需重启。
 
 - 商业服务需要真实 API Key；地址留空使用原生 adapter 默认值。
+- OpenAI 使用 Responses `web_search`；默认模型 `gpt-4.1-mini`，支持模型、搜索上下文及输出上限设置。地址留空使用 `https://api.openai.com/v1`，结果标记 AI 生成摘要，建议超时 30000ms。详见 [OpenAI 接入说明](docs/smart-search-router/openai-web-search.md)。
 - SearXNG 需要服务地址及 JSON 输出，可指定逗号分隔的引擎。管理员可以连接内网实例。
 - 编辑时 API Key 留空保留同类型原密钥，换类型时不会沿用旧凭据。
 - “测试”执行真实查询，显示结果数、延迟及失败类别；有 HTTP 响应但无结果仍判为失败。
@@ -127,6 +128,6 @@ LITELLM_MASTER_KEY=sk-bensz-search-local-demo \
 
 ## English overview
 
-**bensz-search** is a task-aware search service on LiteLLM 1.103.2 with no upstream source changes. Version 0.2 adds a Chinese console with authenticated users, encrypted persistent provider settings, live tests, search playground and revocable API keys.
+**bensz-search** is a task-aware search service on LiteLLM 1.103.2 with no upstream source changes. Version 0.3 adds OpenAI Responses web search with citations and configurable model/context/output limits. Version 0.2 adds a Chinese console with authenticated users, encrypted persistent provider settings, live tests, search playground and revocable API keys.
 
 Run `python docs/deploy/deploy_local.py`, open `http://127.0.0.1:8898/admin`, and read initial credentials from the ignored `docs/deploy/.secrets/local-admin.txt`. The default deployment performs real retrieval through an existing SearXNG instance; commercial providers require operator-supplied keys. Configuration and identities persist in a Docker volume. Telemetry/circuit breakers remain process-local. Remote hosting and TLS are outside this local deployment.

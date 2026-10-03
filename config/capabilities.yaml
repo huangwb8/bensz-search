@@ -1,5 +1,15 @@
 # Tunable priors, NOT measured provider quality. Estimated USD per request at <=20 results.
 providers:
+  openai:
+    provider: openai
+    # Underlying sources are not guaranteed independent from other aggregators.
+    source_family: openai_aggregate
+    capabilities: {general: 0.85, news: 0.70, academic: 0.75, deep: 0.85, people: 0.65, coding: 0.85, semantic: 0.85, keyword: 0.75, freshness: 0.70, authority: 0.80}
+    features: [web_search, generated_summary, citations, domain_filter]
+    cost_class: high
+    latency_class: high
+    estimated_cost_usd: 0.015
+    timeout_ms: 30000
   exa:
     provider: exa_ai
     source_family: exa

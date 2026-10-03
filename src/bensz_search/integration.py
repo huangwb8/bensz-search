@@ -9,6 +9,7 @@ from litellm.integrations.custom_logger import CustomLogger
 from pydantic import ValidationError
 
 from .models import SearchRequest
+from .openai_search import provider_call
 from .router import SearchFailed, SmartRouter
 
 
@@ -200,11 +201,12 @@ def install(proxy, registry):
     if proxy.llm_router is None:
         raise RuntimeError("LiteLLM must configure at least one search tool")
     original = proxy.llm_router.asearch
-    smart = SmartRouter(registry, original)
+    physical = provider_call(proxy.llm_router, original)
+    smart = SmartRouter(registry, physical)
 
     async def routed_search(**kwargs):
         if kwargs.get("search_tool_name", kwargs.get("model")) != "auto":
-            return await original(**kwargs)
+            return await physical(**kwargs)
         ctx = request_context.get()
         if ctx is None or not ctx.authorized:
             raise HTTPException(403, "Smart search requires the authenticated gateway context")

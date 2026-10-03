@@ -14,6 +14,8 @@
 
 ## 用户可观察的行为
 
+0.3 增加 OpenAI Web Search：`openai_search.py` 使用 LiteLLM Responses 调用内置 `web_search`，由 `provider_call()` 接入显式和自动路径，其他 provider 保持原生 Router。后台持久化模型、搜索上下文大小和输出限制；来源按实际引用与 sources 归一化，生成摘要明确标记。完整边界见 [OpenAI 接入说明](openai-web-search.md)。
+
 研究 Agent 搜索 ctDNA 临床证据时，系统可同时查询语义检索源和网页源，把同一论文合并并保留出处。查询一个确切的文档时通常只调用一个工具。所有选择均有解释；无需为了每次选择先付一次 LLM 费用。
 
 ## 架构与请求流
@@ -28,11 +30,14 @@ flowchart TD
     HTTP --> Auth[原生 key / team / budget 检查]
     Auth --> Hook[pre-call callback: 候选工具权限检查]
     Hook --> Route{search_tool_name}
-    Route -->|explicit| Original[原生 Router.asearch]
+    Route -->|explicit| Dispatch[provider_call 分派]
     Route -->|auto| Intent[任务解析与规则分类]
     Intent --> Plan[能力表 + 健康 + 历史指标 → SearchPlan]
     Plan --> Execute[全局期限 / 成本预留 / 并发 / fallback]
-    Execute --> Original
+    Execute --> Dispatch
+    Dispatch --> Original[原生 Router.asearch]
+    Dispatch --> OpenAI[LiteLLM aresponses + web_search]
+    OpenAI --> Normalize
     Original --> Adapters[LiteLLM 已有 Search adapters]
     Adapters --> Providers[搜索服务]
     Providers --> Normalize[原生 SearchResponse]
@@ -51,7 +56,7 @@ flowchart TD
 
 ## 路由算法
 
-1. 显式指定 provider 时由原生 Router 处理，不触发智能分类。
+1. 显式指定 provider 时不触发智能分类；OpenAI 使用项目 Responses 适配器，其余由原生 Router 处理。
 2. auto 优先结构化 profile，其次 profile_prompt，最后 query 词汇规则。支持中文和英文触发词；deep_research/scientific_research 等 profile type 映射到 MVP 意图。
 3. 排除未配置/无权限/熔断/高于预算的候选。按意图适配、semantic/keyword、freshness、authority、质量、历史成功率、观测延迟、cost class 评分；相同 source_family 施加重复来源惩罚。
 4. 通用/精确请求默认一个；academic/news/people 或高召回默认两个；deep 最多三个。cost=low 或 latency=low 限制为一个。不会默认并发六个源。
@@ -87,7 +92,7 @@ debug 成本明确区分 **配置预估** 与 provider/LiteLLM 已知实际费�
 
 ## 配置与 API 兼容
 
-原生 `search_tools` 配置管理真实凭据；独立 `capabilities.yaml` 描述能力，不保存 key。默认 YAML 仅启用已配凭据的工具；`auto` 为逻辑工具别名。支持 `/search`、`/v1/search` 及路径参数形式。query-only 在原生入口前补默认工具，因此鉴权也看到最终 tool。显式请求完整透传，保留原生 provider-specific 参数、错误及 fallback 行为。
+原生 `search_tools` 配置管理真实凭据；独立 `capabilities.yaml` 描述能力，不保存 key。默认 YAML 仅启用已配凭据的工具；`auto` 为逻辑工具别名。支持 `/search`、`/v1/search` 及路径参数形式。query-only 在原生入口前补默认工具，因此鉴权也看到最终 tool。既有 provider 的显式请求完整透传，保留原生 provider-specific 参数、错误及 fallback 行为；OpenAI 接口只转发统一搜索参数，其模型、工具、输出上限和地址使用服务端配置。
 
 auto 仅转发统一安全参数；客户端不能覆写 credentials、base URL、headers、retries/fallbacks 或内部 caller metadata。反馈和指标接口也使用原生身份鉴权。
 
@@ -95,4 +100,4 @@ auto 仅转发统一安全参数；客户端不能覆写 credentials、base URL�
 
 Python 3.11、固定 LiteLLM 版本、依赖 lock；单容器运行原生 FastAPI proxy，无 UI/数据库。默认 loopback 发布端口。demo profile 增加隔离的 fixture provider 服务，真实部署从环境变量读取 keys 和 SearXNG URL。
 
-升级流程：更新版本 → 重新审计 endpoint/Router/callback/lifespan/response model → 运行单元和 proxy 集成/benchmark → Docker demo。适配层保持在 `integration.py`；算法模块不 import proxy 内部类型。未来 hook 足够时替换此适配层。第一版不 fork：没有 upstream diff 要合并。
+升级流程：更新版本 → 重新审计 endpoint/Router/callback/lifespan/response model → 运行单元和 proxy 集成/benchmark → Docker demo。版本敏感接点保持在 `integration.py`，项目新增 provider 协议独立于 `openai_search.py`；算法模块不 import proxy 内部类型。未来 hook 足够时替换此适配层。第一版不 fork：没有 upstream diff 要合并。

@@ -1,5 +1,14 @@
 model_list: []
 search_tools:
+  - search_tool_name: openai
+    litellm_params:
+      search_provider: openai
+      api_key: os.environ/OPENAI_API_KEY
+      api_base: os.environ/OPENAI_SEARCH_API_BASE
+      search_model: os.environ/OPENAI_SEARCH_MODEL
+      search_context_size: medium
+      max_output_tokens: 2048
+      timeout: 30
   - search_tool_name: exa
     litellm_params: {search_provider: exa_ai, api_key: os.environ/EXA_API_KEY}
   - search_tool_name: brave

@@ -18,10 +18,17 @@ from . import __version__
 from .admin_store import AdminStore, digest
 from .integration import install
 from .models import SearchRequest, StrictModel
+from .openai_search import DEFAULT_MODEL, provider_call
 from .registry import Registry
 from .router import SearchFailed, failure_category
 
 CATALOG = [
+    {
+        "provider": "openai",
+        "label": "OpenAI Web Search",
+        "requires_api_key": True,
+        "default_api_base": "https://api.openai.com/v1",
+    },
     {
         "provider": "exa_ai",
         "label": "Exa",
@@ -73,6 +80,11 @@ class ProviderInput(StrictModel):
     api_key: str = Field(default="", max_length=4096)
     api_base: str = Field(default="", max_length=2048)
     engines: list[str] = Field(default_factory=list, max_length=30)
+    search_model: str = Field(
+        default=DEFAULT_MODEL, min_length=1, max_length=128, pattern=r"^(openai/)?[a-zA-Z0-9_.-]+$"
+    )
+    search_context_size: str = Field(default="medium", pattern=r"^(low|medium|high)$")
+    max_output_tokens: int = Field(default=2048, ge=128, le=8192)
     timeout_ms: int = Field(default=10000, ge=100, le=60000)
     source_family: str | None = Field(default=None, min_length=1, max_length=64)
     estimated_cost_usd: float | None = Field(default=None, ge=0, le=10)
@@ -166,6 +178,13 @@ class AdminRuntime:
                 params[key] = record[key]
         if record.get("engines"):
             params["engines"] = ",".join(record["engines"])
+        if record["provider"] == "openai":
+            params.update(
+                search_model=record.get("search_model", DEFAULT_MODEL),
+                search_context_size=record.get("search_context_size", "medium"),
+                max_output_tokens=record.get("max_output_tokens", 2048),
+                timeout=record["timeout_ms"] / 1000,
+            )
         return {"search_tool_name": record["name"], "litellm_params": params}
 
     def refresh(self):
@@ -373,7 +392,9 @@ async def test_provider(
         # Disabled configurations remain testable; they are not inserted into the live router.
         temporary = litellm.Router(model_list=[], search_tools=[runtime.tool(record)], num_retries=0)
         result = await asyncio.wait_for(
-            temporary.asearch(search_tool_name=name, query=data.query, max_results=3, num_retries=0),
+            provider_call(temporary, temporary.asearch)(
+                search_tool_name=name, query=data.query, max_results=3, num_retries=0
+            ),
             record["timeout_ms"] / 1000,
         )
         rows = result.results[:3]
@@ -407,6 +428,9 @@ async def search(data: SearchRequest, session=Depends(current_session), runtime=
                     search_tool_name=data.search_tool_name,
                     query=data.query,
                     max_results=data.max_results,
+                    search_domain_filter=data.search_domain_filter,
+                    country=data.country,
+                    max_tokens_per_page=data.max_tokens_per_page,
                     num_retries=0,
                 ),
                 min(record["timeout_ms"], data.constraints.latency_budget_ms or 15000) / 1000,
@@ -509,7 +533,10 @@ def initialize_admin(app, proxy, registry, callback, configured_tools):
                 "engines": [engine.strip() for engine in engines.split(",") if engine.strip()]
                 if isinstance(engines, str)
                 else engines,
-                "timeout_ms": 15000,
+                "search_model": resolve(params.get("search_model", DEFAULT_MODEL)) or DEFAULT_MODEL,
+                "search_context_size": params.get("search_context_size", "medium"),
+                "max_output_tokens": params.get("max_output_tokens", 2048),
+                "timeout_ms": int(params.get("timeout", 15) * 1000),
                 "source_family": capability.source_family,
                 "estimated_cost_usd": capability.estimated_cost_usd,
             }

@@ -26,7 +26,7 @@
 
 `llms/base_llm/search/transformation.py:BaseSearchConfig` 定义搜索配置接口；HTTP 方法、完整 URL、环境/headers、请求与响应变换由各 provider 子类实现。项目复用这些 adapter，不另写商业服务协议。
 
-`types/utils.py:SearchProviders` 在 1.103.2 中列出 perplexity、tavily、parallel_ai、exa_ai、brave、google_pse、dataforseo、firecrawl、fastcrw、searxng、linkup、duckduckgo、searchapi、serper、you_com、apiserpent、tinyfish、agentcore、nimble、bing_grounding。枚举支持不等于本项目配置/验证范围；后台本次只提供六类配置：Exa、Brave、Tavily、Serper、Perplexity、SearXNG。
+`types/utils.py:SearchProviders` 在 1.103.2 中列出 perplexity、tavily、parallel_ai、exa_ai、brave、google_pse、dataforseo、firecrawl、fastcrw、searxng、linkup、duckduckgo、searchapi、serper、you_com、apiserpent、tinyfish、agentcore、nimble、bing_grounding。枚举不含 OpenAI。后台提供六类原生配置：Exa、Brave、Tavily、Serper、Perplexity、SearXNG，并在 0.3 增加项目适配的 OpenAI Web Search。
 
 SearXNG 的 `SearXNGSearchConfig` 用 GET JSON 协议，将原始结果转换为 SearchResult。统一 max_results 被其当前 adapter 忽略；auto 路径在归一化后截断，原生显式 HTTP 请求保留 upstream 行为。
 
@@ -34,7 +34,15 @@ SearXNG 的 `SearXNGSearchConfig` 用 GET JSON 协议，将原始结果转换为
 
 LiteLLM Router 已经支持同工具名匹配、retry/fallback 和原生回调。它没有实现本项目的六意图异构任务规划、跨工具 weighted RRF、同 source_family 抑制重复票和按任务选择 SearXNG 引擎。重复实现原生同名路由没有必要。
 
-本项目接点为 `integration.py:SearchInputMiddleware`、`AuthorizationCallback` 和 `install()`。入口补默认 auto；callback 交集 key/team 的真实工具权限；初始化后的 `Router.asearch` 只对 auto 进入 SmartRouter，显式调用继续原生 Router。auto 物理请求禁用内部隐藏 fallback/retry，统一执行预算和截止时间。
+本项目接点为 `integration.py:SearchInputMiddleware`、`AuthorizationCallback` 和 `install()`。入口补默认 auto；callback 交集 key/team 的真实工具权限；初始化后的 `Router.asearch` 对 auto 进入 SmartRouter，显式调用经过 `openai_search.py:provider_call()` 分派，既有 provider 继续原生 Router。auto 物理请求禁用内部隐藏 fallback/retry，统一执行预算和截止时间。
+
+## OpenAI Web Search 补充审计
+
+2026-10-03，继续依据 **LiteLLM 1.103.2 发行包**。`search/main.py:search()` 先执行 `SearchProviders(search_provider)`，因此不能直接配置 OpenAI 后依赖原生 Search adapter。`responses/main.py:aresponses()`、`llms/openai/responses/transformation.py:OpenAIResponsesAPIConfig` 和 `llms/custom_httpx/llm_http_handler.py:async_response_api_handler()` 已支持 Responses、tools、tool_choice、include、max_tool_calls 及输出限制。
+
+项目在初始化后的 Router 实例增加分派，不改枚举、全局 provider 注册和 upstream 文件。OpenAI 配置使用 `search_provider: openai` 与 `search_model`，避免与原生 Router 用作工具别名的 `model` 冲突。凭据和网络地址只读服务端配置；物理请求经 `litellm.aresponses` 保留 Responses callbacks，外围 Search endpoint 的鉴权、公共 hooks 和日志仍保留。自动请求仍由 SmartRouter 预留估算成本并控制 fallback；显式 OpenAI 请求受配置超时限制，不提供原生 Search Router 的同名跨 provider retry/fallback。
+
+协议依据：[官方 Web search 文档](https://developers.openai.com/api/docs/guides/tools-web-search)，2026-10-03 已实际读取。使用 `web_search`、强制 `tool_choice: required`、`include: [web_search_call.action.sources]`；只转换结构化 url_citation 和 sources。模型生成摘要带 `snippet_kind: generated_summary`，只有链接的来源带 `source_only`，不补造日期或网页正文。最多一次内置工具调用、配置输出上限、不存储 Responses 对话。搜索结果数量是上限，模型和工具实际账单不可由能力表估算精确约束。
 
 ## 鉴权、预算和日志边界
 
