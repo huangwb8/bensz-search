@@ -80,6 +80,8 @@ class ProviderInput(StrictModel):
     api_key: str = Field(default="", max_length=4096)
     api_base: str = Field(default="", max_length=2048)
     engines: list[str] = Field(default_factory=list, max_length=30)
+    verified_engines: list[str] = Field(default_factory=list, max_length=30)
+    engine_evidence: str | None = Field(default=None, max_length=1000)
     search_model: str = Field(
         default=DEFAULT_MODEL, min_length=1, max_length=128, pattern=r"^(openai/)?[a-zA-Z0-9_.-]+$"
     )
@@ -109,6 +111,12 @@ class ProviderInput(StrictModel):
             raise ValueError("Unsupported search provider")
         if self.provider == "searxng" and not self.api_base:
             raise ValueError("SearXNG requires an API base URL")
+        if self.verified_engines and (
+            self.provider != "searxng"
+            or not self.engine_evidence
+            or not set(self.verified_engines) <= set(self.engines)
+        ):
+            raise ValueError("Verified engines require SearXNG, an enabled engine subset and evidence")
         if self.api_key == "demo-fixture":
             raise ValueError("Fixture providers cannot be used in the management console")
         if self.api_base:
@@ -168,6 +176,8 @@ class AdminRuntime:
                 for intent, engines in groups.items()
                 if configured.intersection(engines)
             }
+            updates["verified_engines"] = record.get("verified_engines", [])
+            updates["engine_evidence"] = record.get("engine_evidence")
         return template.model_copy(update=updates)
 
     @staticmethod
@@ -194,9 +204,12 @@ class AdminRuntime:
         tools.append({"search_tool_name": "auto", "litellm_params": {"search_provider": "searxng"}})
         replacement = litellm.Router(model_list=[], search_tools=tools, num_retries=0)
         telemetry = self.app.state.smart_search.telemetry
+        health = self.app.state.smart_search.health
         self.proxy.llm_router = replacement
         smart, _, _ = install(self.proxy, registry)
         smart.telemetry = telemetry
+        smart.health = health
+        smart.planner.health = health
         self.callback.registry = registry
         self.app.state.smart_search = smart
 
@@ -246,7 +259,13 @@ async def managed_api_auth(request: Request, api_key: str | None):
     is_search = path in {"/search", "/v1/search"} or any(
         path.startswith(prefix) and "/" not in path[len(prefix) :] for prefix in ("/search/", "/v1/search/")
     )
-    if not is_search or request.method != "POST":
+    is_protocol = (
+        (path == "/bensz-search/v1/capabilities" and request.method == "GET")
+        or (path == "/search/tools" and request.method == "GET")
+        or (path == "/bensz-search/v1/search" and request.method == "POST")
+        or (path.rstrip("/") == "/bensz-search/mcp" and request.method in {"POST", "GET", "DELETE"})
+    )
+    if not is_protocol and (not is_search or request.method != "POST"):
         raise HTTPException(403, "Managed access keys are only valid for search requests")
     record = runtime.store.authenticate_key(token)
     if record is None:
@@ -413,6 +432,32 @@ async def test_provider(
             "category": failure_category(error),
             "latency_ms": round((time.monotonic() - started) * 1000),
         }
+
+
+@router.post("/providers/{name}/engines/sync")
+async def sync_provider_engines(name: str, session=Depends(administrator), runtime=Depends(get_runtime)):
+    from .engine_metadata import verified_instance_engines
+
+    record = next((p for p in runtime.store.providers(private=True) if p["name"] == name), None)
+    if record is None:
+        raise HTTPException(404, "配置不存在")
+    try:
+        engines, evidence = await verified_instance_engines(record)
+    except Exception:
+        raise HTTPException(502, "无法验证实例引擎信息；未更改已保存的配置") from None
+    # Do not overwrite a concurrent provider edit with this older fetched snapshot.
+    current = next((p for p in runtime.store.providers(private=True) if p["name"] == name), None)
+    if current != record:
+        raise HTTPException(409, "配置已变化，请重新同步")
+    public = {k: v for k, v in record.items() if k not in {"api_key", "has_api_key"}}
+    public.update(verified_engines=engines, engine_evidence=evidence)
+    runtime.store.save_provider(public)
+    runtime.refresh()
+    return {
+        "verified_engines": engines,
+        "evidence": evidence,
+        "query_semantics": "keyword passthrough; domain field syntax remains unknown",
+    }
 
 
 @router.post("/search")

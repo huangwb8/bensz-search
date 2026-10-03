@@ -38,8 +38,58 @@ class SearchInputMiddleware:
             for prefix in ("/search/", "/v1/search/")
         )
         is_admin = path.startswith("/admin")
+        is_protocol = path.startswith("/bensz-search/")
+        error_start, error_body = None, bytearray()
 
         async def secure_send(message):
+            nonlocal error_start
+            if path.startswith("/bensz-search/v1/"):
+                if message["type"] == "http.response.start" and message["status"] >= 400:
+                    error_start = message
+                    return
+                if error_start and message["type"] == "http.response.body":
+                    error_body.extend(message.get("body", b""))
+                    if message.get("more_body", False):
+                        return
+                    from .protocol import ProtocolFailure
+
+                    try:
+                        data = json.loads(error_body)
+                    except ValueError:
+                        data = {}
+                    if not isinstance(data, dict) or "protocol_version" not in data:
+                        code = {
+                            401: "authentication_error",
+                            403: "permission_denied",
+                            413: "request_too_large",
+                            422: "invalid_plan",
+                            429: "rate_limit",
+                        }.get(error_start["status"], "request_failed")
+                        data = (
+                            ProtocolFailure(
+                                code, "Search request rejected", status_code=error_start["status"]
+                            )
+                            .envelope()
+                            .model_dump()
+                        )
+                    payload = json.dumps(data).encode()
+                    headers = [
+                        (k, v)
+                        for k, v in error_start.get("headers", [])
+                        if k not in {b"content-length", b"content-encoding", b"content-type"}
+                    ]
+                    await send(
+                        {
+                            **error_start,
+                            "headers": headers
+                            + [
+                                (b"content-type", b"application/json"),
+                                (b"content-length", str(len(payload)).encode()),
+                            ],
+                        }
+                    )
+                    await send({"type": "http.response.body", "body": payload})
+                    return
             if message["type"] == "http.response.start" and is_admin:
                 headers = list(message.get("headers", []))
                 headers.extend(
@@ -55,7 +105,7 @@ class SearchInputMiddleware:
                 message = {**message, "headers": headers}
             await send(message)
 
-        if scope.get("method") not in {"POST", "PUT", "PATCH"} or not (is_search or is_admin):
+        if scope.get("method") not in {"POST", "PUT", "PATCH"} or not (is_search or is_admin or is_protocol):
             return await self.app(scope, receive, secure_send)
         try:
             length = int(dict(scope.get("headers", [])).get(b"content-length", b"0"))
@@ -74,6 +124,20 @@ class SearchInputMiddleware:
             if not message.get("more_body", False):
                 break
         if not is_search:
+            if path == "/bensz-search/v1/search":
+                from .protocol import ProtocolFailure
+                from .protocol_models import ProtocolSearch
+
+                try:
+                    ProtocolSearch.model_validate_json(bytes(body))
+                except ValidationError as error:
+                    field = ".".join(str(x) for x in error.errors()[0]["loc"])
+                    data = (
+                        ProtocolFailure("invalid_plan", "Invalid search request", field)
+                        .envelope()
+                        .model_dump()
+                    )
+                    return await self.error(secure_send, 422, data=data)
             delivered = False
 
             async def replay_admin():
@@ -135,8 +199,8 @@ class SearchInputMiddleware:
             request_context.reset(token)
 
     @staticmethod
-    async def error(send, status, detail):
-        body = json.dumps({"detail": detail}).encode()
+    async def error(send, status, detail=None, data=None):
+        body = json.dumps(data if data is not None else {"detail": detail}).encode()
         await send(
             {
                 "type": "http.response.start",

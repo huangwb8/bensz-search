@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bensz-search"
-version = "0.3.0"
+version = "0.4.0"
 description = "Task-aware smart search control plane for the LiteLLM gateway"
 requires-python = ">=3.11,<3.14"
-dependencies = ["litellm[proxy]==1.103.2", "httpx>=0.28,<0.29", "pyyaml>=6,<7", "pydantic>=2.11,<3", "uvicorn>=0.30,<1", "prisma==0.15.0", "cryptography>=49,<51"]
+dependencies = ["litellm[proxy]==1.103.2", "httpx>=0.28,<0.29", "pyyaml>=6,<7", "pydantic>=2.11,<3", "uvicorn>=0.30,<1", "prisma==0.15.0", "cryptography>=49,<51", "mcp==2.2.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2", "ruff>=0.11,<1", "bensz-auto-contribution @ git+https://github.com/huangwb8/bensz-auto-contribution.git@52b007919e1c28f2211a874e8323944538942512"]

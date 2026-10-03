@@ -41,6 +41,31 @@ def title_key(title):
     return re.sub(r"\W+", " ", title.casefold()).strip()
 
 
+def document_identity(result):
+    """Only authoritative identifiers/URL namespaces; never title-only cross-site merges."""
+    parts = urlsplit(result.url)
+    host = (parts.hostname or "").lower()
+    doi = getattr(result, "doi", None)
+    if host in {"doi.org", "dx.doi.org"}:
+        doi = parts.path.lstrip("/")
+    if isinstance(doi, str) and re.fullmatch(r"10\.\d{4,9}/[^\s?#]+", doi, re.I):
+        return "doi:" + doi.lower()
+    pmid = getattr(result, "pmid", None)
+    if host == "pubmed.ncbi.nlm.nih.gov":
+        pmid = parts.path.strip("/")
+    elif host in {"www.ncbi.nlm.nih.gov", "ncbi.nlm.nih.gov"} and parts.path.startswith("/pubmed/"):
+        pmid = parts.path.removeprefix("/pubmed/").strip("/")
+    if isinstance(pmid, (int, str)) and re.fullmatch(r"\d{1,10}", str(pmid)):
+        return "pmid:" + str(pmid)
+    arxiv = getattr(result, "arxiv_id", None)
+    if host in {"arxiv.org", "www.arxiv.org"} and parts.path.startswith(("/abs/", "/pdf/")):
+        arxiv = parts.path[5:].removesuffix(".pdf")
+    # Keep explicit versions separate; absent version is not assumed to be v1.
+    if isinstance(arxiv, str) and re.fullmatch(r"(?:\d{4}\.\d{4,5}|[a-z.-]+/\d{7})(?:v\d+)?", arxiv):
+        return "arxiv:" + arxiv
+    return None
+
+
 def same_document(a: SearchResult, b: SearchResult) -> bool:
     pa, pb = urlsplit(a.url), urlsplit(b.url)
     # Same domain alone is not enough. Keep meaningful query variants / pagination.
@@ -64,6 +89,7 @@ def fuse(
     mode: str,
     count: int,
     k=60,
+    scholarly=False,
 ):
     documents = {}
     for provider, results in buckets.items():
@@ -77,7 +103,7 @@ def fuse(
                 if isinstance(hinted, str) and urlsplit(hinted).hostname == urlsplit(result.url).hostname
                 else result.url
             )
-            key = canonical_url(url)
+            key = (document_identity(result) if scholarly else None) or canonical_url(url)
             if key not in documents:
                 key = next(
                     (
@@ -87,8 +113,7 @@ def fuse(
                     ),
                     key,
                 )
-            if key in seen:
-                continue
+            duplicate = key in seen
             seen.add(key)
             document = documents.setdefault(
                 key,
@@ -98,18 +123,34 @@ def fuse(
                     "providers": [],
                     "index": len(documents),
                     "contributions": {},
+                    "sources": [],
+                    "aliases": [],
+                    "identity": key,
                 },
             )
+            document["sources"].append(
+                {
+                    "provider": provider,
+                    "rank": getattr(result, "original_rank", rank),
+                    "snippet_kind": getattr(result, "snippet_kind", "search_summary"),
+                    "date": result.date,
+                }
+            )
+            if result.url not in document["aliases"]:
+                document["aliases"].append(result.url)
             if provider not in document["providers"]:
                 document["providers"].append(provider)
             weight = weights.get(provider, 1) if mode == "weighted_rrf" else 1
             contribution = weight / (k + rank)
             family = families.get(provider, provider)
-            document["families"][family] = max(document["families"].get(family, 0), contribution)
-            document["contributions"][provider] = contribution
+            if not duplicate:
+                document["families"][family] = max(document["families"].get(family, 0), contribution)
+                document["contributions"][provider] = contribution
             for field in ("snippet", "date", "last_updated"):
                 if not getattr(document["result"], field) and getattr(result, field):
                     setattr(document["result"], field, getattr(result, field))
+                    if field == "snippet":
+                        document["result"].snippet_kind = getattr(result, "snippet_kind", "search_summary")
     values = list(documents.values())
     if mode != "none":
         values.sort(key=lambda d: (-sum(d["families"].values()), d["index"]))
@@ -120,6 +161,9 @@ def fuse(
             "providers": d["providers"],
             "family_contributions": d["families"],
             "provider_contributions": d["contributions"],
+            "canonical_identity": d["identity"],
+            "sources": d["sources"],
+            "aliases": d["aliases"],
         }
         for d in values[:count]
     ]

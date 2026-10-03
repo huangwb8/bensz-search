@@ -20,7 +20,11 @@ from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
 from .admin import initialize_admin, managed_api_auth
 from .admin import router as admin_router
 from .integration import SearchInputMiddleware, install
+from .mcp_transport import MCPTransport, create_manager
 from .models import SearchResultFeedback
+from .protocol import ProtocolFailure
+from .protocol_http import load_team, permission_snapshot
+from .protocol_http import router as protocol_router
 from .registry import Registry
 
 
@@ -107,7 +111,9 @@ async def lifespan(application):
                         application, proxy, registry, callback, proxy.llm_router.search_tools
                     )
                     proxy.user_custom_auth = managed_api_auth
-                yield state
+                application.state.search_mcp = create_manager()
+                async with application.state.search_mcp.run():
+                    yield state
             finally:
                 proxy.llm_router.asearch = original
                 litellm.callbacks.remove(callback)
@@ -128,13 +134,33 @@ app.add_middleware(SearchInputMiddleware, default_tool=os.getenv("BENSZ_SEARCH_D
 
 static_path = Path(__file__).parent / "static"
 app.include_router(admin_router)
+app.include_router(protocol_router)
+app.mount("/bensz-search/mcp", MCPTransport(), name="bensz-search-mcp")
 if static_path.exists():
     app.mount("/admin/static", StaticFiles(directory=static_path), name="admin-static")
 
 # Reuse upstream API documentation, give the main browser entry to the product console.
 app.router.routes[:] = [
-    route for route in app.router.routes if getattr(route, "name", "") != "swagger_ui_html"
+    route
+    for route in app.router.routes
+    if getattr(route, "name", "") != "swagger_ui_html" and getattr(route, "path", "") != "/search/tools"
 ]
+
+
+@app.get("/search/tools", tags=["search"])
+async def native_tools(request: Request, user=Depends(user_api_key_auth)):
+    from .integration import authorized_tools
+
+    smart, allowed = await permission_snapshot(request, user, enforce_protocol=False)
+    aliases = await authorized_tools({"auto"}, user, await load_team(user))
+    return {
+        "object": "list",
+        "data": [
+            {"search_tool_name": name, "search_provider": smart.registry.providers[name].provider}
+            for name in sorted(allowed)
+        ]
+        + ([{"search_tool_name": "auto", "search_provider": "searxng"}] if aliases else []),
+    }
 
 
 @app.get("/", include_in_schema=False)
@@ -183,6 +209,12 @@ async def readiness():
 @app.exception_handler(RequestValidationError)
 async def invalid_request(request: Request, error: RequestValidationError):
     # Validation errors can echo provider keys/passwords in their input payloads.
+    if request.url.path.startswith("/bensz-search/"):
+        field = ".".join(str(x) for x in error.errors()[0]["loc"])
+        return JSONResponse(
+            ProtocolFailure("invalid_plan", "Invalid search request", field).envelope().model_dump(),
+            status_code=422,
+        )
     return JSONResponse(
         {
             "detail": "; ".join(
@@ -190,6 +222,13 @@ async def invalid_request(request: Request, error: RequestValidationError):
             )
         },
         status_code=422,
+    )
+
+
+@app.exception_handler(ProtocolFailure)
+async def protocol_error(request: Request, error: ProtocolFailure):
+    return JSONResponse(
+        error.envelope().model_dump(), status_code=error.status_code, headers={"Cache-Control": "no-store"}
     )
 
 

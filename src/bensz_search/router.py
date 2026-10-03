@@ -1,12 +1,12 @@
 """Execution owns one deadline, one attempt per tool and one estimated cost reservation."""
 
-import asyncio
-import time
 from uuid import uuid4
 
 from litellm.llms.base_llm.search.transformation import SearchResponse
 
-from .filters import filter_results, provider_options
+from .executor import ExecutionCall, execute
+from .executor import failure_category as failure_category
+from .filters import provider_options
 from .fusion import fuse
 from .health import Health
 from .intent import analyze
@@ -21,32 +21,12 @@ class SearchFailed(Exception):
         self.status_code = status_code
 
 
-def failure_category(error):
-    status = getattr(error, "status_code", None)
-    if status in {401, 403}:
-        return "auth"
-    if status == 402:
-        return "quota"
-    if status == 429:
-        return "rate_limit"
-    if (
-        isinstance(error, (TimeoutError, asyncio.TimeoutError))
-        or status == 408
-        or "timeout" in type(error).__name__.lower()
-    ):
-        return "timeout"
-    if status is not None and 400 <= status < 500:
-        return "bad_request"
-    if isinstance(error, (ValueError, TypeError)):
-        return "invalid_response"
-    return "unavailable"
-
-
 class SmartRouter:
     def __init__(self, registry, call, health=None, telemetry=None):
         self.registry, self.call = registry, call
         self.health, self.telemetry = health or Health(), telemetry or Telemetry()
         self.planner = Planner(registry, self.health)
+        self.generation = str(uuid4())
 
     async def search(self, request: SearchRequest, allowed: set[str], context=None):
         task = analyze(request)
@@ -55,129 +35,37 @@ class SmartRouter:
         except NoProviders as error:
             raise SearchFailed(str(error), 503) from error
         request_id = str(uuid4())
-        deadline = time.monotonic() + plan.timeout_ms / 1000
-        claimed, buckets, attempts = set(), {}, []
-        reserved_cost = 0.0
-        multiplier = len(request.query) if isinstance(request.query, list) else 1
         all_entries = plan.providers + plan.fallbacks
-        # Reserve ownership of primaries before parallel branches can claim fallbacks.
-        primary_names = {entry.name for entry in plan.providers}
-        base = dict(context or {})
-        for name in (
-            "model",
-            "search_tool_name",
-            "custom_llm_provider",
-            "search_provider",
-            "api_key",
-            "api_base",
-            "litellm_logging_obj",
-            "litellm_call_id",
-            "fallbacks",
-            "num_retries",
-            "max_retries",
-        ):
-            base.pop(name, None)
 
-        async def execute(primary):
-            nonlocal reserved_cost
-            candidates = [primary] + plan.fallbacks
-            for entry in candidates:
-                name = entry.name
-                if name in claimed or (name != primary.name and name in primary_names):
-                    continue
-                capability = self.registry.providers[name]
-                cost = capability.estimated_cost_usd * multiplier
-                remaining = deadline - time.monotonic()
-                if remaining <= 0 or reserved_cost + cost > plan.max_cost + 1e-12:
-                    continue
-                if not self.health.claim(name):
-                    continue
-                # No await between eligibility, claim and reservation: atomic in this event loop.
-                claimed.add(name)
-                reserved_cost += cost
-                attempt = {
-                    "provider": name,
-                    "status": "pending",
-                    "fallback": name != primary.name,
-                    "estimated_cost_usd": cost,
-                    "latency_ms": 0,
-                    "result_count": 0,
-                }
-                attempts.append(attempt)
-                started = time.monotonic()
-                try:
-                    kwargs = dict(base)
-                    if "litellm_metadata" in kwargs:
-                        kwargs["litellm_metadata"] = dict(kwargs["litellm_metadata"] or {})
-                    metadata = dict(kwargs.get("metadata") or {})
-                    metadata.update(
-                        {
-                            "model_group": name,
-                            "smart_search_request_id": request_id,
-                            "smart_search_intent": task.intent,
-                        }
-                    )
-                    kwargs.update(
-                        query=request.query,
-                        search_tool_name=name,
-                        model=name,
-                        max_results=entry.count,
-                        metadata=metadata,
-                        num_retries=0,
-                        max_retries=0,
-                        fallbacks=[],
-                        disable_fallbacks=True,
-                        context_window_fallbacks=[],
-                        content_policy_fallbacks=[],
-                        timeout=min(capability.timeout_ms / 1000, remaining),
-                        litellm_call_id=str(uuid4()),
-                    )
-                    if request.search_domain_filter:
-                        kwargs["search_domain_filter"] = request.search_domain_filter
-                    if request.country:
-                        kwargs["country"] = request.country
-                    if request.max_tokens_per_page is not None:
-                        kwargs["max_tokens_per_page"] = request.max_tokens_per_page
-                    kwargs.update(provider_options(capability.provider, task))
-                    if capability.intent_engines.get(task.intent):
-                        kwargs["engines"] = ",".join(capability.intent_engines[task.intent])
-                    raw = await asyncio.wait_for(
-                        self.call(**kwargs), min(capability.timeout_ms / 1000, remaining)
-                    )
-                    response = raw if isinstance(raw, SearchResponse) else SearchResponse.model_validate(raw)
-                    rows = filter_results(response.results, task, request.search_domain_filter)[: entry.count]
-                    attempt["result_count"] = len(rows)
-                    attempt["status"] = "success" if rows else "empty"
-                    if rows:
-                        buckets[name] = rows
-                        attempt["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
-                        self.health.success(name, attempt["latency_ms"])
-                        break
-                    self.health.failure(name, "empty")
-                except asyncio.CancelledError:
-                    attempt["status"] = "timeout"
-                    self.health.failure(name, "timeout")
-                    raise
-                except Exception as error:
-                    category = failure_category(error)
-                    attempt["status"] = category
-                    self.health.failure(name, category)
-                    if category == "bad_request":
-                        break
-                finally:
-                    attempt["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
-                    self.health.release(name)
+        def execution_call(entry):
+            capability = self.registry.providers[entry.name]
+            options = provider_options(capability.provider, task)
+            if request.search_domain_filter:
+                options["search_domain_filter"] = request.search_domain_filter
+            if request.country:
+                options["country"] = request.country
+            if request.max_tokens_per_page is not None:
+                options["max_tokens_per_page"] = request.max_tokens_per_page
+            if capability.intent_engines.get(task.intent):
+                options["engines"] = ",".join(capability.intent_engines[task.intent])
+            return ExecutionCall(
+                entry.name,
+                entry.name,
+                request.query,
+                entry.count,
+                entry.weight,
+                options=options,
+                domains=request.search_domain_filter,
+                task=task,
+            )
 
-        pending = [asyncio.create_task(execute(entry)) for entry in plan.providers]
-        try:
-            await asyncio.wait_for(asyncio.gather(*pending), max(0.001, deadline - time.monotonic()))
-        except TimeoutError:
-            pass
-        finally:
-            for job in pending:
-                if not job.done():
-                    job.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
+        calls = [execution_call(e) for e in plan.providers]
+        fallbacks = [execution_call(e) for e in plan.fallbacks]
+        for item in calls:
+            item.fallbacks = fallbacks
+        buckets, attempts, reserved_cost = await execute(
+            self, calls, plan.timeout_ms, plan.max_cost, request_id, context, empty_is_failure=True
+        )
         # Stable provider order, independent of network completion speed.
         ordered = {entry.name: buckets[entry.name] for entry in all_entries if entry.name in buckets}
         results, trace = fuse(

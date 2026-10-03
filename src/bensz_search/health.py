@@ -11,6 +11,8 @@ class State:
     probing: bool = False
     success_rate: float = 1
     latency_ms: float | None = None
+    observed_at: str | None = None
+    observed_result: str = "unknown"
 
 
 class Health:
@@ -34,7 +36,10 @@ class Health:
         return True
 
     def success(self, name, latency_ms):
+        from datetime import UTC, datetime
+
         state = self.state(name)
+        state.observed_at, state.observed_result = datetime.now(UTC).isoformat(), "success"
         state.failures, state.open_until, state.probing = 0, 0, False
         state.success_rate = 0.8 * state.success_rate + 0.2
         state.latency_ms = (
@@ -42,7 +47,10 @@ class Health:
         )
 
     def failure(self, name, category):
+        from datetime import UTC, datetime
+
         state = self.state(name)
+        state.observed_at, state.observed_result = datetime.now(UTC).isoformat(), category
         probe = state.probing
         state.failures += 1
         state.probing = False

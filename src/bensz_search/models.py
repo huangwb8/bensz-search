@@ -91,6 +91,11 @@ class ProviderCapabilities(StrictModel):
     latency_class: Literal["low", "medium", "high"] = "medium"
     estimated_cost_usd: float = Field(ge=0, le=10)
     timeout_ms: int = Field(default=4000, ge=100, le=60000)
+    # Only advertise selectable engines after operator/instance/adapter verification.
+    verified_engines: list[str] = Field(default_factory=list, max_length=30)
+    engine_evidence: str | None = Field(default=None, max_length=1000)
+    query_max_length: int = Field(default=10000, ge=1, le=10000)
+    query_dialects: list[str] = Field(default_factory=lambda: ["keywords", "natural_language"])
 
     @field_validator("capabilities")
     @classmethod
