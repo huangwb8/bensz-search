@@ -121,7 +121,7 @@ LITELLM_MASTER_KEY=sk-bensz-search-local-demo \
 
 ## 文档与边界
 
-- [跨模型协议现状审计](docs/smart-search-router/protocol-readiness-audit.md)与[全球主流 LLM 接入优化计划](docs/plans/2026-10-03-global-llm-search-protocol.md)：面向模型无关的 HTTP/JSON、应用内置接入代码、用户仅配置 URL/Key；能力发现、外部 AI 分引擎查询计划与跨模型适配仍为拟议能力。
+- [跨模型协议现状审计](docs/smart-search-router/protocol-readiness-audit.md)与[全球主流 LLM 接入优化计划](docs/plans/2026-10-03-global-llm-search-protocol.md)：公开搜索 API 与工具契约，直接 HTTP 和 MCP 入口共用搜索服务，应用内置接入且用户仅配置入口 URL/凭据；实施前审计保留历史依据；现有实现、机器契约和验收边界见[协议交付](docs/smart-search-router/protocol/README.md)。
 - [Upstream 审计](docs/smart-search-router/architecture-audit.md)、[设计](docs/smart-search-router/proposed-design.md)、[当前实施计划](docs/plans/2026-10-02-production-admin.md)。
 - 六意图：general、news、academic、deep、people、coding。profile_prompt 使用有限规则，未提供完整自然语言 planner。
 - 预估成本是配置先验，不是供应商账单；严格 freshness 过滤无日期结果；authority 是排序偏好，不能保证证据等级。
@@ -133,3 +133,15 @@ LITELLM_MASTER_KEY=sk-bensz-search-local-demo \
 **bensz-search** is a task-aware search service on LiteLLM 1.103.2 with no upstream source changes. Version 0.3 adds OpenAI Responses web search with citations and configurable model/context/output limits. Version 0.2 adds a Chinese console with authenticated users, encrypted persistent provider settings, live tests, search playground and revocable API keys.
 
 Run `python docs/deploy/deploy_local.py`, open `http://127.0.0.1:8898/admin`, and read initial credentials from the ignored `docs/deploy/.secrets/local-admin.txt`. The default deployment performs real retrieval through an existing SearXNG instance; commercial providers require operator-supplied keys. Configuration and identities persist in a Docker volume. Telemetry/circuit breakers remain process-local. Remote hosting and TLS are outside this local deployment.
+
+## 全球 LLM 搜索协议 / Global LLM search protocol
+
+新增版本化能力发现、外部 AI 分引擎计划、默认执行状态/来源、Python 与 TypeScript 内置客户端、五种模型消息族和 MCP Streamable HTTP 入口。应用终端用户新增配置仍为搜索 URL/应用 Key；服务使用应用已有 AI，provider 凭据留在后台。
+
+- [协议规范、机器 Schema 与验证边界](docs/smart-search-router/protocol/README.md)
+- [中文接入](docs/smart-search-router/protocol/integration.zh-CN.md) / [English integration](docs/smart-search-router/protocol/integration.en.md)
+- [具体模型/渠道兼容矩阵](docs/smart-search-router/protocol/compatibility.md) / [验证报告](docs/smart-search-router/protocol/verification.md)
+
+消息适配族已实现并通过离线闭环；真实搜索与 MCP 单独验收。尚无真实模型凭据，具体厂商版本保持待验证，不能宣称全模型生产兼容。旧 `/search` 和后台保持兼容。
+
+Versioned capabilities/planned search, default provenance/status, embedded Python/TypeScript clients, five model message families and an MCP entrance are implemented. Model-family fixtures pass offline; specific live model/channel versions remain unverified. See the English guide and matrix above.

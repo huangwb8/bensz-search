@@ -1,5 +1,7 @@
 # bensz-search 跨模型协议就绪情况审计
 
+> 本文件记录实施前的工作区审计；后续代码交付与验证见 [协议规范](protocol/README.md) 和 [验证报告](protocol/verification.md)。
+
 ## 审计范围与依据
 
 2026-10-03，依据当前工作区源码，Git 基线 `ecd805370c1527ebd4b8ef460b96555e7b85ff39`，并包含审计时已有未提交改动。项目配置版本为 `0.3.0`，实际安装与锁定的 upstream 为 **LiteLLM 1.103.2 发行包**；未取得对应 upstream Git commit。当前源码与已有部署不是同一个验收对象。

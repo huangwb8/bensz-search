@@ -1,0 +1,1233 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "bensz-search protocol",
+    "version": "1.0"
+  },
+  "paths": {
+    "/bensz-search/v1/capabilities": {
+      "get": {
+        "tags": [
+          "bensz-search protocol v1"
+        ],
+        "summary": "Get Capabilities",
+        "operationId": "get_capabilities_bensz_search_v1_capabilities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitySnapshot"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    },
+    "/bensz-search/v1/search": {
+      "post": {
+        "tags": [
+          "bensz-search protocol v1"
+        ],
+        "summary": "Post Search",
+        "operationId": "post_search_bensz_search_v1_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtocolSearch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Availability": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "credentials_ready": {
+            "type": "boolean",
+            "title": "Credentials Ready"
+          },
+          "cooling_down": {
+            "type": "boolean",
+            "title": "Cooling Down"
+          },
+          "recent_probe_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Probe At"
+          },
+          "recent_probe_result": {
+            "type": "string",
+            "title": "Recent Probe Result",
+            "default": "unknown"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled",
+          "credentials_ready",
+          "cooling_down"
+        ],
+        "title": "Availability"
+      },
+      "CallSpec": {
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_.-]+$",
+            "title": "Call Id"
+          },
+          "tool_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Tool Id"
+          },
+          "engine_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Id"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "max_results": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "default": 10
+          },
+          "options": {
+            "$ref": "#/components/schemas/QueryOptions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "call_id",
+          "tool_id",
+          "query"
+        ],
+        "title": "CallSpec"
+      },
+      "CallerProfile": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": "auto"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain",
+            "default": "auto"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "general",
+              "news",
+              "academic",
+              "deep",
+              "people",
+              "coding"
+            ],
+            "title": "Intent",
+            "default": "auto"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CallerProfile"
+      },
+      "CapabilityLimits": {
+        "properties": {
+          "max_calls": {
+            "type": "integer",
+            "title": "Max Calls"
+          },
+          "concurrency": {
+            "type": "integer",
+            "title": "Concurrency"
+          },
+          "max_snippet_chars": {
+            "type": "integer",
+            "title": "Max Snippet Chars"
+          },
+          "max_response_bytes": {
+            "type": "integer",
+            "title": "Max Response Bytes"
+          },
+          "tenant_concurrency": {
+            "type": "integer",
+            "title": "Tenant Concurrency"
+          },
+          "requests_per_minute": {
+            "type": "integer",
+            "title": "Requests Per Minute"
+          },
+          "max_results": {
+            "type": "integer",
+            "title": "Max Results"
+          },
+          "max_latency_ms": {
+            "type": "integer",
+            "title": "Max Latency Ms"
+          },
+          "state_scope": {
+            "type": "string",
+            "title": "State Scope"
+          },
+          "strict_billing_budget": {
+            "type": "boolean",
+            "title": "Strict Billing Budget"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "max_calls",
+          "concurrency",
+          "max_snippet_chars",
+          "max_response_bytes",
+          "tenant_concurrency",
+          "requests_per_minute",
+          "max_results",
+          "max_latency_ms",
+          "state_scope",
+          "strict_billing_budget"
+        ],
+        "title": "CapabilityLimits"
+      },
+      "CapabilitySnapshot": {
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "title": "Protocol Version",
+            "default": "1.0"
+          },
+          "interaction_version": {
+            "type": "string",
+            "title": "Interaction Version",
+            "default": "1.0"
+          },
+          "registry_revision": {
+            "type": "string",
+            "title": "Registry Revision"
+          },
+          "generated_at": {
+            "type": "string",
+            "title": "Generated At"
+          },
+          "cache_ttl_seconds": {
+            "type": "integer",
+            "title": "Cache Ttl Seconds"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/CapabilityLimits"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCapability"
+            },
+            "type": "array",
+            "title": "Tools"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "registry_revision",
+          "generated_at",
+          "cache_ttl_seconds",
+          "limits",
+          "tools"
+        ],
+        "title": "CapabilitySnapshot"
+      },
+      "Constraints": {
+        "properties": {
+          "freshness": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "any",
+              "day",
+              "week",
+              "month",
+              "year"
+            ],
+            "title": "Freshness",
+            "default": "auto"
+          },
+          "authority": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Authority",
+            "default": "auto"
+          },
+          "recall": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Recall",
+            "default": "auto"
+          },
+          "precision": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Precision",
+            "default": "auto"
+          },
+          "semantic": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Semantic",
+            "default": "auto"
+          },
+          "source_diversity": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Source Diversity",
+            "default": "auto"
+          },
+          "latency": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Latency",
+            "default": "auto"
+          },
+          "cost": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Cost",
+            "default": "auto"
+          },
+          "latency_budget_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 60000.0,
+                "minimum": 100.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Budget Ms"
+          },
+          "cost_budget_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 10.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Budget Usd"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Constraints"
+      },
+      "EngineCapability": {
+        "properties": {
+          "engine_id": {
+            "type": "string",
+            "title": "Engine Id"
+          },
+          "selectable": {
+            "type": "boolean",
+            "title": "Selectable"
+          },
+          "query_contract": {
+            "$ref": "#/components/schemas/QueryContract"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "engine_id",
+          "selectable",
+          "query_contract"
+        ],
+        "title": "EngineCapability"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "PlannedCall": {
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_.-]+$",
+            "title": "Call Id"
+          },
+          "tool_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Tool Id"
+          },
+          "engine_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Id"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "max_results": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "default": 10
+          },
+          "options": {
+            "$ref": "#/components/schemas/QueryOptions"
+          },
+          "fallbacks": {
+            "items": {
+              "$ref": "#/components/schemas/CallSpec"
+            },
+            "type": "array",
+            "maxItems": 9,
+            "title": "Fallbacks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "call_id",
+          "tool_id",
+          "query"
+        ],
+        "title": "PlannedCall"
+      },
+      "ProtocolError": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "retryable": {
+            "type": "boolean",
+            "title": "Retryable",
+            "default": false
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ProtocolError"
+      },
+      "ProtocolResult": {
+        "properties": {
+          "result_id": {
+            "type": "string",
+            "title": "Result Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "canonical_identity": {
+            "type": "string",
+            "title": "Canonical Identity"
+          },
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Aliases"
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet"
+          },
+          "snippet_kind": {
+            "type": "string",
+            "title": "Snippet Kind"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "fusion_score": {
+            "type": "number",
+            "title": "Fusion Score"
+          },
+          "score_basis": {
+            "type": "string",
+            "title": "Score Basis",
+            "default": "rank contribution; not factual confidence"
+          },
+          "content_trust": {
+            "type": "string",
+            "const": "untrusted_external_content",
+            "title": "Content Trust",
+            "default": "untrusted_external_content"
+          },
+          "dedup_basis": {
+            "type": "string",
+            "title": "Dedup Basis",
+            "default": "canonical URL or conservative document identity"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "result_id",
+          "title",
+          "url",
+          "canonical_identity",
+          "aliases",
+          "snippet",
+          "snippet_kind",
+          "sources",
+          "fusion_score"
+        ],
+        "title": "ProtocolResult"
+      },
+      "ProtocolSearch": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "planned"
+            ],
+            "title": "Mode",
+            "default": "auto"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "calls": {
+            "items": {
+              "$ref": "#/components/schemas/PlannedCall"
+            },
+            "type": "array",
+            "maxItems": 10,
+            "title": "Calls"
+          },
+          "registry_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registry Revision"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/Constraints"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/CallerProfile"
+          },
+          "options": {
+            "$ref": "#/components/schemas/QueryOptions"
+          },
+          "fusion": {
+            "type": "string",
+            "enum": [
+              "none",
+              "rrf",
+              "weighted_rrf"
+            ],
+            "title": "Fusion",
+            "default": "weighted_rrf"
+          },
+          "max_results": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "default": 10
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          },
+          "fallback_on_empty": {
+            "type": "boolean",
+            "title": "Fallback On Empty",
+            "default": false
+          },
+          "response_language": {
+            "type": "string",
+            "maxLength": 35,
+            "pattern": "^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$",
+            "title": "Response Language",
+            "default": "en"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ProtocolSearch"
+      },
+      "QueryContract": {
+        "properties": {
+          "input_forms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Input Forms"
+          },
+          "max_query_length": {
+            "type": "integer",
+            "title": "Max Query Length"
+          },
+          "max_queries_per_call": {
+            "type": "integer",
+            "title": "Max Queries Per Call"
+          },
+          "max_results": {
+            "type": "integer",
+            "title": "Max Results"
+          },
+          "operators": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "supported",
+                "unsupported",
+                "unknown"
+              ]
+            },
+            "type": "object",
+            "title": "Operators"
+          },
+          "options": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "native",
+                "post_filter",
+                "advisory",
+                "unsupported",
+                "unknown"
+              ]
+            },
+            "type": "object",
+            "title": "Options"
+          },
+          "examples": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Examples"
+          },
+          "common_errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Common Errors"
+          },
+          "evidence": {
+            "type": "string",
+            "title": "Evidence"
+          },
+          "last_verified": {
+            "type": "string",
+            "title": "Last Verified"
+          },
+          "verification_scope": {
+            "type": "string",
+            "title": "Verification Scope"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "input_forms",
+          "max_query_length",
+          "max_queries_per_call",
+          "max_results",
+          "operators",
+          "options",
+          "examples",
+          "common_errors",
+          "evidence",
+          "last_verified",
+          "verification_scope"
+        ],
+        "title": "QueryContract"
+      },
+      "QueryOptions": {
+        "properties": {
+          "dialect": {
+            "type": "string",
+            "enum": [
+              "keywords",
+              "natural_language"
+            ],
+            "title": "Dialect",
+            "default": "keywords"
+          },
+          "search_domain_filter": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Search Domain Filter"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z]{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "query_language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 35,
+                "pattern": "^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Language"
+          },
+          "result_language": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 35,
+                "pattern": "^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Language"
+          },
+          "safe_search": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "moderate",
+                  "strict"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Safe Search"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "QueryOptions"
+      },
+      "SearchEnvelope": {
+        "properties": {
+          "protocol_version": {
+            "type": "string",
+            "title": "Protocol Version",
+            "default": "1.0"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "registry_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registry Revision"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "partial_success",
+              "no_results",
+              "failed",
+              "validated"
+            ],
+            "title": "Status"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ProtocolResult"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "execution": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Execution"
+          },
+          "warnings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "estimated_cost_usd": {
+            "type": "number",
+            "title": "Estimated Cost Usd",
+            "default": 0
+          },
+          "cost_basis": {
+            "type": "string",
+            "title": "Cost Basis",
+            "default": "configured estimate including failed calls; not provider billing"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProtocolError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          },
+          "constraints": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Constraints"
+          },
+          "cost_estimate": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Cost Estimate"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "status"
+        ],
+        "title": "SearchEnvelope"
+      },
+      "Source": {
+        "properties": {
+          "call_id": {
+            "type": "string",
+            "title": "Call Id"
+          },
+          "tool_id": {
+            "type": "string",
+            "title": "Tool Id"
+          },
+          "engine_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Id"
+          },
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "source_family": {
+            "type": "string",
+            "title": "Source Family"
+          },
+          "independence_basis": {
+            "type": "string",
+            "title": "Independence Basis",
+            "default": "configured source family; independence not measured"
+          },
+          "snippet_kind": {
+            "type": "string",
+            "title": "Snippet Kind"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "call_id",
+          "tool_id",
+          "rank",
+          "source_family",
+          "snippet_kind"
+        ],
+        "title": "Source"
+      },
+      "ToolCapability": {
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "title": "Tool Id"
+          },
+          "provider_type": {
+            "type": "string",
+            "title": "Provider Type"
+          },
+          "engines": {
+            "items": {
+              "$ref": "#/components/schemas/EngineCapability"
+            },
+            "type": "array",
+            "title": "Engines"
+          },
+          "tasks": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Tasks"
+          },
+          "score_basis": {
+            "type": "string",
+            "title": "Score Basis"
+          },
+          "query_contract": {
+            "$ref": "#/components/schemas/QueryContract"
+          },
+          "source_family": {
+            "type": "string",
+            "title": "Source Family"
+          },
+          "independence_confidence": {
+            "type": "string",
+            "title": "Independence Confidence"
+          },
+          "independence_basis": {
+            "type": "string",
+            "title": "Independence Basis"
+          },
+          "estimated_cost_usd": {
+            "type": "number",
+            "title": "Estimated Cost Usd"
+          },
+          "cost_basis": {
+            "type": "string",
+            "title": "Cost Basis"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "title": "Timeout Ms"
+          },
+          "availability": {
+            "$ref": "#/components/schemas/Availability"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tool_id",
+          "provider_type",
+          "engines",
+          "tasks",
+          "score_basis",
+          "query_contract",
+          "source_family",
+          "independence_confidence",
+          "independence_basis",
+          "estimated_cost_usd",
+          "cost_basis",
+          "timeout_ms",
+          "availability"
+        ],
+        "title": "ToolCapability"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "APIKeyHeader": {
+        "type": "apiKey",
+        "description": "Bearer token",
+        "in": "header",
+        "name": "x-litellm-api-key"
+      }
+    }
+  }
+}

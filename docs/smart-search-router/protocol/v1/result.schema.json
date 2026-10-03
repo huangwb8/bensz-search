@@ -1,0 +1,308 @@
+{
+  "$defs": {
+    "ProtocolError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "retryable": {
+          "default": false,
+          "title": "Retryable",
+          "type": "boolean"
+        },
+        "suggestion": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Suggestion"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ProtocolError",
+      "type": "object"
+    },
+    "ProtocolResult": {
+      "additionalProperties": false,
+      "properties": {
+        "result_id": {
+          "title": "Result Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "canonical_identity": {
+          "title": "Canonical Identity",
+          "type": "string"
+        },
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "snippet": {
+          "title": "Snippet",
+          "type": "string"
+        },
+        "snippet_kind": {
+          "title": "Snippet Kind",
+          "type": "string"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "title": "Sources",
+          "type": "array"
+        },
+        "fusion_score": {
+          "title": "Fusion Score",
+          "type": "number"
+        },
+        "score_basis": {
+          "default": "rank contribution; not factual confidence",
+          "title": "Score Basis",
+          "type": "string"
+        },
+        "content_trust": {
+          "const": "untrusted_external_content",
+          "default": "untrusted_external_content",
+          "title": "Content Trust",
+          "type": "string"
+        },
+        "dedup_basis": {
+          "default": "canonical URL or conservative document identity",
+          "title": "Dedup Basis",
+          "type": "string"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "result_id",
+        "title",
+        "url",
+        "canonical_identity",
+        "aliases",
+        "snippet",
+        "snippet_kind",
+        "sources",
+        "fusion_score"
+      ],
+      "title": "ProtocolResult",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "tool_id": {
+          "title": "Tool Id",
+          "type": "string"
+        },
+        "engine_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine Id"
+        },
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "source_family": {
+          "title": "Source Family",
+          "type": "string"
+        },
+        "independence_basis": {
+          "default": "configured source family; independence not measured",
+          "title": "Independence Basis",
+          "type": "string"
+        },
+        "snippet_kind": {
+          "title": "Snippet Kind",
+          "type": "string"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date"
+        }
+      },
+      "required": [
+        "call_id",
+        "tool_id",
+        "rank",
+        "source_family",
+        "snippet_kind"
+      ],
+      "title": "Source",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "default": "1.0",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "registry_revision": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Registry Revision"
+    },
+    "status": {
+      "enum": [
+        "success",
+        "partial_success",
+        "no_results",
+        "failed",
+        "validated"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "results": {
+      "items": {
+        "$ref": "#/$defs/ProtocolResult"
+      },
+      "title": "Results",
+      "type": "array"
+    },
+    "execution": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Execution",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "estimated_cost_usd": {
+      "default": 0,
+      "title": "Estimated Cost Usd",
+      "type": "number"
+    },
+    "cost_basis": {
+      "default": "configured estimate including failed calls; not provider billing",
+      "title": "Cost Basis",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProtocolError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "truncated": {
+      "default": false,
+      "title": "Truncated",
+      "type": "boolean"
+    },
+    "constraints": {
+      "additionalProperties": true,
+      "title": "Constraints",
+      "type": "object"
+    },
+    "cost_estimate": {
+      "additionalProperties": true,
+      "title": "Cost Estimate",
+      "type": "object"
+    }
+  },
+  "required": [
+    "request_id",
+    "status"
+  ],
+  "title": "SearchEnvelope",
+  "type": "object"
+}

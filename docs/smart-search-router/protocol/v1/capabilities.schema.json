@@ -1,0 +1,352 @@
+{
+  "$defs": {
+    "Availability": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "credentials_ready": {
+          "title": "Credentials Ready",
+          "type": "boolean"
+        },
+        "cooling_down": {
+          "title": "Cooling Down",
+          "type": "boolean"
+        },
+        "recent_probe_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recent Probe At"
+        },
+        "recent_probe_result": {
+          "default": "unknown",
+          "title": "Recent Probe Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "credentials_ready",
+        "cooling_down"
+      ],
+      "title": "Availability",
+      "type": "object"
+    },
+    "CapabilityLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_calls": {
+          "title": "Max Calls",
+          "type": "integer"
+        },
+        "concurrency": {
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "max_snippet_chars": {
+          "title": "Max Snippet Chars",
+          "type": "integer"
+        },
+        "max_response_bytes": {
+          "title": "Max Response Bytes",
+          "type": "integer"
+        },
+        "tenant_concurrency": {
+          "title": "Tenant Concurrency",
+          "type": "integer"
+        },
+        "requests_per_minute": {
+          "title": "Requests Per Minute",
+          "type": "integer"
+        },
+        "max_results": {
+          "title": "Max Results",
+          "type": "integer"
+        },
+        "max_latency_ms": {
+          "title": "Max Latency Ms",
+          "type": "integer"
+        },
+        "state_scope": {
+          "title": "State Scope",
+          "type": "string"
+        },
+        "strict_billing_budget": {
+          "title": "Strict Billing Budget",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "max_calls",
+        "concurrency",
+        "max_snippet_chars",
+        "max_response_bytes",
+        "tenant_concurrency",
+        "requests_per_minute",
+        "max_results",
+        "max_latency_ms",
+        "state_scope",
+        "strict_billing_budget"
+      ],
+      "title": "CapabilityLimits",
+      "type": "object"
+    },
+    "EngineCapability": {
+      "additionalProperties": false,
+      "properties": {
+        "engine_id": {
+          "title": "Engine Id",
+          "type": "string"
+        },
+        "selectable": {
+          "title": "Selectable",
+          "type": "boolean"
+        },
+        "query_contract": {
+          "$ref": "#/$defs/QueryContract"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence"
+        }
+      },
+      "required": [
+        "engine_id",
+        "selectable",
+        "query_contract"
+      ],
+      "title": "EngineCapability",
+      "type": "object"
+    },
+    "QueryContract": {
+      "additionalProperties": false,
+      "properties": {
+        "input_forms": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Input Forms",
+          "type": "array"
+        },
+        "max_query_length": {
+          "title": "Max Query Length",
+          "type": "integer"
+        },
+        "max_queries_per_call": {
+          "title": "Max Queries Per Call",
+          "type": "integer"
+        },
+        "max_results": {
+          "title": "Max Results",
+          "type": "integer"
+        },
+        "operators": {
+          "additionalProperties": {
+            "enum": [
+              "supported",
+              "unsupported",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "title": "Operators",
+          "type": "object"
+        },
+        "options": {
+          "additionalProperties": {
+            "enum": [
+              "native",
+              "post_filter",
+              "advisory",
+              "unsupported",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "title": "Options",
+          "type": "object"
+        },
+        "examples": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Examples",
+          "type": "array"
+        },
+        "common_errors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Common Errors",
+          "type": "array"
+        },
+        "evidence": {
+          "title": "Evidence",
+          "type": "string"
+        },
+        "last_verified": {
+          "title": "Last Verified",
+          "type": "string"
+        },
+        "verification_scope": {
+          "title": "Verification Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_forms",
+        "max_query_length",
+        "max_queries_per_call",
+        "max_results",
+        "operators",
+        "options",
+        "examples",
+        "common_errors",
+        "evidence",
+        "last_verified",
+        "verification_scope"
+      ],
+      "title": "QueryContract",
+      "type": "object"
+    },
+    "ToolCapability": {
+      "additionalProperties": false,
+      "properties": {
+        "tool_id": {
+          "title": "Tool Id",
+          "type": "string"
+        },
+        "provider_type": {
+          "title": "Provider Type",
+          "type": "string"
+        },
+        "engines": {
+          "items": {
+            "$ref": "#/$defs/EngineCapability"
+          },
+          "title": "Engines",
+          "type": "array"
+        },
+        "tasks": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Tasks",
+          "type": "object"
+        },
+        "score_basis": {
+          "title": "Score Basis",
+          "type": "string"
+        },
+        "query_contract": {
+          "$ref": "#/$defs/QueryContract"
+        },
+        "source_family": {
+          "title": "Source Family",
+          "type": "string"
+        },
+        "independence_confidence": {
+          "title": "Independence Confidence",
+          "type": "string"
+        },
+        "independence_basis": {
+          "title": "Independence Basis",
+          "type": "string"
+        },
+        "estimated_cost_usd": {
+          "title": "Estimated Cost Usd",
+          "type": "number"
+        },
+        "cost_basis": {
+          "title": "Cost Basis",
+          "type": "string"
+        },
+        "timeout_ms": {
+          "title": "Timeout Ms",
+          "type": "integer"
+        },
+        "availability": {
+          "$ref": "#/$defs/Availability"
+        }
+      },
+      "required": [
+        "tool_id",
+        "provider_type",
+        "engines",
+        "tasks",
+        "score_basis",
+        "query_contract",
+        "source_family",
+        "independence_confidence",
+        "independence_basis",
+        "estimated_cost_usd",
+        "cost_basis",
+        "timeout_ms",
+        "availability"
+      ],
+      "title": "ToolCapability",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "default": "1.0",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "interaction_version": {
+      "default": "1.0",
+      "title": "Interaction Version",
+      "type": "string"
+    },
+    "registry_revision": {
+      "title": "Registry Revision",
+      "type": "string"
+    },
+    "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+    },
+    "cache_ttl_seconds": {
+      "title": "Cache Ttl Seconds",
+      "type": "integer"
+    },
+    "limits": {
+      "$ref": "#/$defs/CapabilityLimits"
+    },
+    "tools": {
+      "items": {
+        "$ref": "#/$defs/ToolCapability"
+      },
+      "title": "Tools",
+      "type": "array"
+    }
+  },
+  "required": [
+    "registry_revision",
+    "generated_at",
+    "cache_ttl_seconds",
+    "limits",
+    "tools"
+  ],
+  "title": "CapabilitySnapshot",
+  "type": "object"
+}
