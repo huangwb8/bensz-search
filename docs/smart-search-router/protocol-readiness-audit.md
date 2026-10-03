@@ -14,6 +14,8 @@
 
 现有 `auto` 是服务端规则规划；调用搜索使用 OpenAI Web Search provider，不等于让外部 OpenAI 模型或其它模型获得工具能力。两条方向需要分别描述。
 
+外部模型也不会仅从 URL 和 Key 获知使用流程；尚需工具说明、可信交互规则、能力结果回填及有界调用循环。具体拟议行为见 [AI 交互协议设计](agent-interaction-protocol-design.md)。
+
 ## 按用户流程核查
 
 | 用户需要的行为 | 设计和实现情况 | 验证与缺口 |
