@@ -21,6 +21,7 @@ from .models import SearchRequest, StrictModel
 from .openai_search import DEFAULT_MODEL, provider_call
 from .registry import Registry
 from .router import SearchFailed, failure_category
+from .searxng import DEFAULT_ENGINES, INTENT_ENGINE_GROUPS
 
 CATALOG = [
     {
@@ -54,7 +55,13 @@ CATALOG = [
         "requires_api_key": True,
         "default_api_base": "https://api.perplexity.ai",
     },
-    {"provider": "searxng", "label": "SearXNG", "requires_api_key": False, "default_api_base": ""},
+    {
+        "provider": "searxng",
+        "label": "SearXNG",
+        "requires_api_key": False,
+        "default_api_base": "",
+        "default_engines": list(DEFAULT_ENGINES),
+    },
 ]
 
 
@@ -166,14 +173,9 @@ class AdminRuntime:
         }
         if record["provider"] == "searxng":
             configured = set(record.get("engines", []))
-            groups = {
-                "academic": ["pubmed", "arxiv", "google scholar", "semantic scholar"],
-                "coding": ["github", "gitlab", "stackoverflow"],
-                "news": ["bing news", "google news", "brave.news"],
-            }
             updates["intent_engines"] = {
                 intent: [engine for engine in engines if engine in configured]
-                for intent, engines in groups.items()
+                for intent, engines in INTENT_ENGINE_GROUPS.items()
                 if configured.intersection(engines)
             }
             updates["verified_engines"] = record.get("verified_engines", [])

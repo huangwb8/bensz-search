@@ -6,7 +6,7 @@
 
 需要 Docker Compose 2.24.4+ 与 Python 3.11+。已有支持 JSON 输出的 SearXNG 可直接接入，本机初始化默认地址为 `http://host.docker.internal:8080`。
 
-官方镜像发布于 Docker Hub：`huangwb8/bensz-search:1.0.0`（linux/amd64）。服务器部署可直接拉取镜像并配合 [docs/deploy/compose.yaml](docs/deploy/compose.yaml) 使用；本机初始化继续使用下方脚本。
+官方镜像发布于 Docker Hub：`huangwb8/bensz-search:1.0.1`（linux/amd64）。服务器部署参考[服务器部署说明](docs/deploy/server-deployment.md)，配合 `docs/deploy/docker-compose.yml`、外部代理网络与独立 SearXNG 使用；本机初始化继续使用下方脚本。
 
 ```bash
 python docs/deploy/deploy_local.py
@@ -37,7 +37,7 @@ python docs/deploy/deploy_local.py
 
 首次启动从 `config/litellm.yaml` 和 `docs/deploy/.env` 导入服务，之后以后台数据库为准；修改 `docs/deploy/.env` 不会覆盖后台设置。凭据加密保存，接口只返回是否已配置，不返回完整 provider key。
 
-本机已验证来源为 SearXNG 的 GitHub / PubMed，默认初始化选择这两个引擎。后台可以换成实例上实际可用的网页或新闻引擎。公共引擎可能 CAPTCHA/限流，不能以空结果当作成功。配置包含 PubMed 时，学术自动请求优先使用学术引擎；代码意图优先使用已配置的 GitHub 等引擎。没有商业 key 时，不宣称商业源已实测通过。
+本机初始化默认选择 SearXNG 的 11 个常用引擎：Google、Bing、DuckDuckGo、Brave、百度、Wikipedia、GitHub、Stack Overflow、PubMed、arXiv 与 Google News；实例上也需启用对应引擎。后台编辑时可一键填入该列表，并按实例实际可用情况增删；留空使用实例默认。自动路由按意图选择已配置子集：学术查询优先 PubMed/arXiv 等学术引擎，代码意图优先 GitHub/Stack Overflow，新闻与通用查询使用网页引擎。历史真实验收覆盖 GitHub/PubMed，扩充的常用列表属于默认配置，不宣称全部引擎已实测。公共引擎可能 CAPTCHA/限流，不能以空结果当作成功。没有商业 key 时，不宣称商业源已实测通过。
 
 ### 用户与访问密钥
 
@@ -93,7 +93,7 @@ docker compose -f docs/deploy/compose.yaml ps
 
 备份时停止服务，复制整个 `/app/data` 并妥善保存 `docs/deploy/.env`，然后重新启动。不要用 `docker compose -f docs/deploy/compose.yaml down -v` 日常重启，它会删除数据卷。详见 [部署说明](docs/deploy/README.md)。
 
-默认非 root 容器、移除 Linux capabilities、禁止权限提升，限制内存/并发/PID/日志。本次是单机单进程部署；运行指标、熔断、历史重启清空，配置与身份持久化。公网 HTTPS 和多节点部署需另行配置，本地无需域名服务器。
+默认非 root 容器、移除 Linux capabilities、禁止权限提升，限制内存/并发/PID/日志。本次是单机单进程部署；运行指标、熔断、历史重启清空，配置与身份持久化。公网 HTTPS 反向代理的登录与 Cookie 配置见[服务器部署说明](docs/deploy/server-deployment.md)；多节点部署需另行验证。
 
 ## 开发与验证
 
@@ -134,7 +134,7 @@ LITELLM_MASTER_KEY=sk-bensz-search-local-demo \
 
 **bensz-search** is a task-aware search service on LiteLLM 1.103.2 with no upstream source changes. Version 1.0 delivers the versioned global search protocol: capability discovery, external AI planned search, default provenance/status, embedded Python/TypeScript clients and an MCP Streamable HTTP entrance, on top of OpenAI Responses web search with citations (0.3) and the Chinese console with authenticated users, encrypted persistent provider settings, live tests and revocable API keys (0.2). Official images are published as `huangwb8/bensz-search` on Docker Hub (linux/amd64).
 
-Run `python docs/deploy/deploy_local.py` (or `docker pull huangwb8/bensz-search:1.0.0` for server deployments), open `http://127.0.0.1:8898/admin`, and read initial credentials from the ignored `docs/deploy/.secrets/local-admin.txt`. The default deployment performs real retrieval through an existing SearXNG instance; commercial providers require operator-supplied keys. Configuration and identities persist in a Docker volume. Telemetry/circuit breakers remain process-local. Remote hosting and TLS are outside this local deployment.
+Run `python docs/deploy/deploy_local.py` (or `docker pull huangwb8/bensz-search:1.0.1` for server deployments), open `http://127.0.0.1:8898/admin`, and read initial credentials from the ignored `docs/deploy/.secrets/local-admin.txt`. The default deployment performs real retrieval through an existing SearXNG instance; commercial providers require operator-supplied keys. Configuration and identities persist in a Docker volume. Telemetry/circuit breakers remain process-local. Remote hosting and TLS are outside this local deployment.
 
 ## 全球 LLM 搜索协议 / Global LLM search protocol
 

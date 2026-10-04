@@ -1,0 +1,65 @@
+name: bensz-search
+
+services:
+  search:
+    image: ${BENSZ_SEARCH_IMAGE:-huangwb8/bensz-search:latest}
+    container_name: bensz-search
+    expose:
+      - "8000"
+    env_file:
+      - .env
+    environment:
+      BENSZ_SEARCH_CONFIG: config/litellm.yaml
+      BENSZ_SEARCH_CAPABILITIES: config/capabilities.yaml
+      BENSZ_SEARCH_MODE: production
+      BENSZ_SEARCH_DATA_DIR: /app/data
+      SEARXNG_API_BASE: http://bensz-search-searxng:8080
+    volumes:
+      - ./search-data:/app/data
+    depends_on:
+      searxng:
+        condition: service_healthy
+    networks:
+      - npm_default
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: bensz-search-searxng
+    expose:
+      - "8080"
+    volumes:
+      - ./searxng:/etc/searxng
+      - ./searxng-cache:/var/cache/searxng
+    networks:
+      - npm_default
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -T 5 -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
+    mem_limit: 1g
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+
+networks:
+  npm_default:
+    external: true
+    name: npm_default

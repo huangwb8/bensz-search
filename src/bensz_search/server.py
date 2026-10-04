@@ -26,6 +26,7 @@ from .protocol import ProtocolFailure
 from .protocol_http import load_team, permission_snapshot
 from .protocol_http import router as protocol_router
 from .registry import Registry
+from .searxng import DEFAULT_ENGINES
 
 
 def effective_config():
@@ -47,6 +48,13 @@ def effective_config():
             base = params.get("api_base", "")
             if not base or (base.startswith("os.environ/") and not os.getenv(base.split("/", 1)[1])):
                 continue
+            engines = params.get("engines")
+            if (
+                isinstance(engines, str)
+                and engines.startswith("os.environ/")
+                and os.getenv(engines.split("/", 1)[1]) is None
+            ):
+                params["engines"] = ",".join(DEFAULT_ENGINES)
         tools.append(tool)
     production = os.getenv("BENSZ_SEARCH_MODE", "production") == "production"
     if not tools and not production:
@@ -168,6 +176,12 @@ async def native_tools(request: Request, user=Depends(user_api_key_auth)):
 @app.get("/v1/search", include_in_schema=False)
 async def browser_entry():
     return RedirectResponse("/admin", status_code=303)
+
+
+# Included upstream routers can contain an authenticated GET / hidden from the
+# top-level path filter. Give our browser entries priority without changing POST.
+browser_routes = [route for route in app.router.routes if getattr(route, "endpoint", None) is browser_entry]
+app.router.routes[:] = browser_routes + [route for route in app.router.routes if route not in browser_routes]
 
 
 @app.get("/favicon.ico", include_in_schema=False)

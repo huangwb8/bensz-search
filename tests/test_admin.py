@@ -1,5 +1,6 @@
 """Identity, credential protection and real management/runtime contracts."""
 
+import os
 import secrets
 
 import pytest
@@ -11,7 +12,7 @@ from bensz_search.admin_store import AdminStore
 
 
 @pytest.fixture
-def console(monkeypatch, tmp_path):
+def console(monkeypatch, tmp_path, request):
     monkeypatch.setenv("BENSZ_SEARCH_MODE", "production")
     monkeypatch.setenv("BENSZ_SEARCH_CONFIG", "config/litellm.yaml")
     monkeypatch.setenv("LITELLM_MASTER_KEY", "sk-test-" + secrets.token_urlsafe(32))
@@ -19,7 +20,11 @@ def console(monkeypatch, tmp_path):
     monkeypatch.setenv("BENSZ_SEARCH_ADMIN_PASSWORD", "test-password-strong")
     monkeypatch.setenv("BENSZ_SEARCH_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("SEARXNG_API_BASE", "http://localhost:8080")
-    monkeypatch.setenv("SEARXNG_ENGINES", "github,pubmed")
+    engines = getattr(request, "param", "github,pubmed")
+    if engines is None:
+        monkeypatch.delenv("SEARXNG_ENGINES", raising=False)
+    else:
+        monkeypatch.setenv("SEARXNG_ENGINES", engines)
     monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     for key in (
         "EXA_API_KEY",
@@ -41,6 +46,45 @@ def login(client, username="admin", password="test-password-strong"):
     response = client.post("/admin/api/login", json={"username": username, "password": password})
     assert response.status_code == 200, response.text
     return {"X-CSRF-Token": response.json()["csrf_token"]}
+
+
+@pytest.mark.parametrize("path", ["/", "/search", "/v1/search"])
+def test_browser_entries_redirect_without_search_credentials(console, path):
+    response = console.get(path, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin"
+    page = console.get(path)
+    assert page.status_code == 200
+    assert "text/html" in page.headers["content-type"]
+    assert console.get("/admin/api/session").status_code == 401
+
+
+@pytest.mark.parametrize("trusted_hosts, expected", [("127.0.0.1", 403), ("172.18.0.22", 200)])
+def test_https_login_behind_proxy(console, monkeypatch, trusted_hosts, expected):
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+    monkeypatch.setenv("BENSZ_SEARCH_COOKIE_SECURE", "true")
+    app = ProxyHeadersMiddleware(console.app, trusted_hosts=trusted_hosts)
+    client = TestClient(app, base_url="http://search.example", client=("172.18.0.22", 12345))
+    headers = {
+        "Origin": "https://search.example",
+        "X-Forwarded-Proto": "https",
+        "Sec-Fetch-Site": "same-origin",
+    }
+    response = client.post(
+        "/admin/api/login", headers=headers, json={"username": "admin", "password": "test-password-strong"}
+    )
+    assert response.status_code == expected
+    if expected == 200:
+        assert "Secure" in response.headers["set-cookie"]
+        assert client.get("https://search.example/admin/api/session", headers=headers).status_code == 200
+    response = client.post(
+        "/admin/api/login",
+        headers={**headers, "Origin": "https://evil.example"},
+        json={"username": "admin", "password": "test-password-strong"},
+    )
+    assert response.status_code == 403
+    client.close()
 
 
 def test_sessions_csrf_and_password_rotation(console):
@@ -129,6 +173,80 @@ def test_provider_crud_and_live_runtime(console):
     assert console.get("/ready").status_code == 503
     assert console.post("/admin/api/search", json={"query": "test"}, headers=headers).status_code == 503
     assert console.get("/admin/api/session").status_code == 200
+
+
+@pytest.mark.parametrize("console", [None, ""], indirect=True)
+def test_searxng_default_engines_and_explicit_instance_defaults(console):
+    headers = login(console)
+    data = console.get("/admin/api/providers").json()
+    configured = next(row for row in data["providers"] if row["name"] == "searxng")
+    recommended = next(row for row in data["catalog"] if row["provider"] == "searxng")["default_engines"]
+    assert {
+        "google",
+        "bing",
+        "duckduckgo",
+        "brave",
+        "baidu",
+        "wikipedia",
+        "github",
+        "pubmed",
+        "arxiv",
+        "google news",
+        "stackoverflow",
+    } <= set(recommended)
+    # Missing env selects application defaults; an explicit empty value uses instance defaults.
+    expected = [] if os.environ.get("SEARXNG_ENGINES") == "" else recommended
+    assert configured["engines"] == expected
+    runtime = console.app.state.admin_runtime
+    if expected:
+        assert runtime.capability(configured).intent_engines["general"] == [
+            "google",
+            "bing",
+            "duckduckgo",
+            "brave",
+            "baidu",
+            "wikipedia",
+        ]
+        assert runtime.capability(configured).intent_engines["academic"] == ["pubmed", "arxiv"]
+        assert runtime.capability(configured).intent_engines["coding"] == ["github", "stackoverflow"]
+        assert runtime.capability(configured).intent_engines["news"] == ["google news"]
+    # Applying recommendations updates the active router; a custom list remains authoritative.
+    for engines in [recommended, ["duckduckgo", "pubmed"], []]:
+        body = {
+            "name": "searxng",
+            "provider": "searxng",
+            "api_base": configured["api_base"],
+            "engines": engines,
+        }
+        assert console.put("/admin/api/providers/searxng", json=body, headers=headers).status_code == 200
+        runtime.refresh()
+        saved = next(row for row in runtime.store.providers() if row["name"] == "searxng")
+        assert saved["engines"] == engines
+        runtime.store.seed_providers([dict(body, engines=recommended)])
+        assert runtime.store.providers()[0]["engines"] == engines
+
+
+@pytest.mark.parametrize("console", [None], indirect=True)
+def test_expanded_searxng_routes_queries_to_configured_engine_groups(console):
+    headers = login(console)
+    calls = []
+
+    async def call(**kwargs):
+        calls.append(kwargs)
+        return SearchResponse(
+            results=[SearchResult(title="Search result", url="https://example.org", snippet="Fixture result")]
+        )
+
+    console.app.state.smart_search.call = call
+    for query, expected in [
+        ("Paris travel guide", "google,bing,duckduckgo,brave,baidu,wikipedia"),
+        ("colorectal cancer ctDNA", "pubmed,arxiv"),
+        ("Python source code", "github,stackoverflow"),
+        ("world news", "google news"),
+    ]:
+        result = console.post("/admin/api/search", json={"query": query}, headers=headers)
+        assert result.status_code == 200, result.text
+        assert calls[-1]["engines"] == expected
 
 
 def test_openai_configuration_test_native_paths_and_auto(console, monkeypatch):

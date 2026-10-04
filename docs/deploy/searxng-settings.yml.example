@@ -1,0 +1,33 @@
+# Copy to searxng/settings.yml, then replace server.secret_key before starting.
+use_default_settings: true
+server:
+  secret_key: "REPLACE_WITH_A_RANDOM_SECRET"
+  # Internal Docker network only; public instances need their own access controls.
+  limiter: false
+search:
+  formats:
+    - html
+    - json
+engines:
+  - name: google
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: brave
+    disabled: false
+  - name: baidu
+    disabled: false
+  - name: wikipedia
+    disabled: false
+  - name: github
+    disabled: false
+  - name: stackoverflow
+    disabled: false
+  - name: pubmed
+    disabled: false
+  - name: arxiv
+    disabled: false
+  - name: google news
+    disabled: false

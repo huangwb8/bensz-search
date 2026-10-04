@@ -1,8 +1,10 @@
 # 本地产品部署与维护
 
-对应 bensz-search 1.0.0 / LiteLLM 1.103.2，部署范围为单机 Docker。当前项目要求先在本机验证，未配置公网入口。
+对应 bensz-search 1.0.1 / LiteLLM 1.103.2，部署范围为单机 Docker。本文描述本地部署；服务器及公网入口见[服务器部署说明](server-deployment.md)。
 
 ## 部署文件与运行目录
+
+服务器 `/docker/bensz-search` 使用本目录的 `docker-compose.yml` 模板，镜像为 `huangwb8/bensz-search:latest`，容器名为 `bensz-search` 与 `bensz-search-searxng`；具体初始化、迁移和维护见[服务器部署说明](server-deployment.md)。服务器只使用 `expose`，通过共享代理网络访问。以下 `compose.yaml`、本机端口和 named volume 说明适用于原本的本地构建流程。
 
 Dockerfile、Compose 配置、部署脚本和环境变量示例统一位于本目录。以下命令均从项目根目录执行；脚本可从任意工作目录调用。私有配置和初始登录信息统一保存在 `docs/deploy/.env` 与 `docs/deploy/.secrets/`，均忽略入库；已有配置与数据卷继续沿用。Compose 自动从部署目录读取 `docs/deploy/.env`，Shell 中同名环境变量仍优先。
 
@@ -11,11 +13,11 @@ Dockerfile、Compose 配置、部署脚本和环境变量示例统一位于本�
 - `compose.yaml`：默认真实服务；`compose.demo.yaml`：模拟测试；`compose.live.yaml`：独立 live demo。
 - `deploy_local.py`：生成私有配置并部署；`.env.example`：环境变量示例。
 
-单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:1.0.0 .`。
+单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:1.0.1 .`。
 
 ## 初始化与登录
 
-运行 `python docs/deploy/deploy_local.py`。脚本仅在 `docs/deploy/.env` 不存在时生成凭据，不覆盖已有内容，然后构建真实服务并等待健康。默认连接本机已有 `8080` SearXNG，不修改其设置；需要该实例启用 JSON、GitHub/PubMed 引擎。
+运行 `python docs/deploy/deploy_local.py`。脚本仅在 `docs/deploy/.env` 不存在时生成凭据，不覆盖已有内容，然后构建真实服务并等待健康。默认连接本机已有 `8080` SearXNG，不修改其设置；需要该实例启用 JSON 和所选引擎。默认列表包含 Google、Bing、DuckDuckGo、Brave、百度、Wikipedia、GitHub、Stack Overflow、PubMed、arXiv 与 Google News；可按实际可用情况调整，留空使用实例默认。
 
 后台 `http://127.0.0.1:8898/admin`；初始登录信息保存在项目忽略的 `docs/deploy/.secrets/local-admin.txt`。管理员在个人设置改密后，文件中的初始密码不再有效。只有首次空库时使用环境中的 bootstrap 账号，重启不重置密码。
 
@@ -29,7 +31,7 @@ Search API 页面支持六类原生 adapter 和 OpenAI Web Search 项目适配�
 
 `docs/deploy/.env` 与 `config/litellm.yaml` 仅作为第一次导入来源；后续改动通过后台保存。服务凭据用独立 `BENSZ_SEARCH_SECRET` 加密，后台不回显完整 key。服务地址只允许无嵌入凭据/查询参数的 HTTP(S) URL；内网地址供受信管理员接入自己的服务。
 
-SearXNG 的 HTTP 200 可能同时含引擎故障和空结果。测试页根据实际结果判成功；可在 SearXNG 实例检查 CAPTCHA/限流，后台更换到真实可用引擎，或添加有凭据的商业源。本机的免费配置覆盖已验证的 GitHub/PubMed，不宣称覆盖全部网页场景。
+SearXNG 的 HTTP 200 可能同时含引擎故障和空结果。测试页根据实际结果判成功；可在 SearXNG 实例检查 CAPTCHA/限流，后台更换到真实可用引擎，或添加有凭据的商业源。历史真实验收覆盖 GitHub/PubMed；扩充的常用列表属于默认配置，不能据此宣称所有引擎均已实测。已有后台配置请通过“编辑 Search API → 填入常用引擎 → 保存配置”更新，实例设置参考 [SearXNG 模板](searxng-settings.yml.example)。
 
 OpenAI 可直接在后台添加，填写 Key、支持 `web_search` 的模型和 30000ms 超时；默认地址 `https://api.openai.com/v1`。首次空库也可通过 `OPENAI_API_KEY`、`OPENAI_SEARCH_API_BASE` 和 `OPENAI_SEARCH_MODEL` 导入；已有数据库使用后台新增。模型生成摘要与来源链接分开标注，真实调用需账号额度。参见 [OpenAI 接入说明](../smart-search-router/openai-web-search.md)。
 
@@ -63,7 +65,7 @@ docker compose -f docs/deploy/compose.yaml start search
 
 ## 版本与验证边界
 
-版本唯一维护于 `pyproject.toml`，镜像标签对应 1.0.0。依赖由 `uv.lock` 固定，upstream 未修改。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
+版本唯一维护于 `pyproject.toml`，镜像标签对应 1.0.1。依赖由 `uv.lock` 固定，upstream 未修改。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
 
 `/health/liveliness` 是进程检查；`/ready` 是配置检查；后台“测试”才验证外部检索。当前已通过的本机验收见 [production-verification.md](../smart-search-router/production-verification.md)。商业源无凭据时只验证配置链路，公网 TLS、多节点和原生 LiteLLM DB 模式未验收。
 

@@ -1,0 +1,7 @@
+# Rebuild the application on a selected existing deployment image.
+# Build context: project root; choose an immutable/local backup base when deploying.
+ARG BASE_IMAGE=huangwb8/bensz-search:latest
+FROM ${BASE_IMAGE}
+COPY --chown=appuser:appuser pyproject.toml uv.lock ./
+COPY --chown=appuser:appuser src ./src
+RUN uv sync --frozen --no-dev --no-editable

@@ -19,7 +19,10 @@ def initialize(deploy_dir):
             "BENSZ_SEARCH_COOKIE_SECURE": "false",
             "BENSZ_SEARCH_PORT": "8898",
             "SEARXNG_API_BASE": os.getenv("SEARXNG_API_BASE", "http://host.docker.internal:8080"),
-            "SEARXNG_ENGINES": os.getenv("SEARXNG_ENGINES", "github,pubmed"),
+            "SEARXNG_ENGINES": os.getenv(
+                "SEARXNG_ENGINES",
+                "google,bing,duckduckgo,brave,baidu,wikipedia,github,stackoverflow,pubmed,arxiv,google news",
+            ),
         }
         # O_EXCL prevents concurrent initializers overwriting secrets.
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

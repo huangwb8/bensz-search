@@ -120,8 +120,9 @@ SearXNG 通常无需 API Key，但必须有服务器可访问的实例，并启�
 
 2. 在 bensz-search 添加：服务名称 `searxng-local`，服务类型 **SearXNG**，填写实例地址，API Key 通常留空，超时 `15000`。
 3. 如 bensz-search 在 Docker 中、SearXNG 在宿主机 `8080` 端口，填写 `http://host.docker.internal:8080`。容器里的 `127.0.0.1` 指向容器自身；如果实例位于其他主机或同一 Docker 网络，应填写容器实际可访问的地址。
-4. “搜索引擎”填写实例上已启用且可用的引擎，多个以逗号分隔，例如 `github, pubmed`。这两种引擎适合代码和医学资料；通用网页搜索应使用实例上可用的网页引擎。留空时使用实例默认引擎。
-5. 保存后测试，按所选引擎使用合适查询，如 GitHub 用 `python`，PubMed 用 `colorectal cancer`。有 HTTP 200 但无结果仍判为失败，需检查上游引擎的限流、CAPTCHA 或故障。
+4. “搜索引擎”填写实例上已启用的引擎，多个以逗号分隔。点击 **填入常用引擎** 可填入 `google, bing, duckduckgo, brave, baidu, wikipedia, github, stackoverflow, pubmed, arxiv, google news`；也可按实例实际可用情况增删。留空时使用实例默认引擎。自动路由对网页、学术、代码和新闻查询使用对应的已配置子集；原生显式搜索使用保存的完整列表。
+5. 本项目独立部署 SearXNG 时，可参考 [实例设置模板](deploy/searxng-settings.yml.example) 启用对应引擎和 JSON 输出。引擎是否能返回结果还取决于网络、CAPTCHA 和限流，需用真实查询确认。已有后台配置需编辑后保存，更新环境变量不会覆盖数据库。
+6. 保存后测试，按所选引擎使用合适查询，如 GitHub 用 `python`，PubMed 用 `colorectal cancer`。有 HTTP 200 但无结果仍判为失败，需检查上游引擎的限流、CAPTCHA 或故障。
 
 若实例前面有 Bearer 鉴权网关，可在 API Key 填写对应 token；当前 adapter 会设置 `Authorization: Bearer …`。表单不支持配置 Basic Auth、Cookie 或任意自定义鉴权头。
 
