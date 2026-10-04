@@ -6,6 +6,8 @@
 
 需要 Docker Compose 2.24.4+ 与 Python 3.11+。已有支持 JSON 输出的 SearXNG 可直接接入，本机初始化默认地址为 `http://host.docker.internal:8080`。
 
+官方镜像发布于 Docker Hub：`huangwb8/bensz-search:1.0.0`（linux/amd64）。服务器部署可直接拉取镜像并配合 [docs/deploy/compose.yaml](docs/deploy/compose.yaml) 使用；本机初始化继续使用下方脚本。
+
 ```bash
 python docs/deploy/deploy_local.py
 ```
@@ -130,9 +132,9 @@ LITELLM_MASTER_KEY=sk-bensz-search-local-demo \
 
 ## English overview
 
-**bensz-search** is a task-aware search service on LiteLLM 1.103.2 with no upstream source changes. Version 0.3 adds OpenAI Responses web search with citations and configurable model/context/output limits. Version 0.2 adds a Chinese console with authenticated users, encrypted persistent provider settings, live tests, search playground and revocable API keys.
+**bensz-search** is a task-aware search service on LiteLLM 1.103.2 with no upstream source changes. Version 1.0 delivers the versioned global search protocol: capability discovery, external AI planned search, default provenance/status, embedded Python/TypeScript clients and an MCP Streamable HTTP entrance, on top of OpenAI Responses web search with citations (0.3) and the Chinese console with authenticated users, encrypted persistent provider settings, live tests and revocable API keys (0.2). Official images are published as `huangwb8/bensz-search` on Docker Hub (linux/amd64).
 
-Run `python docs/deploy/deploy_local.py`, open `http://127.0.0.1:8898/admin`, and read initial credentials from the ignored `docs/deploy/.secrets/local-admin.txt`. The default deployment performs real retrieval through an existing SearXNG instance; commercial providers require operator-supplied keys. Configuration and identities persist in a Docker volume. Telemetry/circuit breakers remain process-local. Remote hosting and TLS are outside this local deployment.
+Run `python docs/deploy/deploy_local.py` (or `docker pull huangwb8/bensz-search:1.0.0` for server deployments), open `http://127.0.0.1:8898/admin`, and read initial credentials from the ignored `docs/deploy/.secrets/local-admin.txt`. The default deployment performs real retrieval through an existing SearXNG instance; commercial providers require operator-supplied keys. Configuration and identities persist in a Docker volume. Telemetry/circuit breakers remain process-local. Remote hosting and TLS are outside this local deployment.
 
 ## 全球 LLM 搜索协议 / Global LLM search protocol
 
@@ -140,6 +142,7 @@ Run `python docs/deploy/deploy_local.py`, open `http://127.0.0.1:8898/admin`, an
 
 - [协议规范、机器 Schema 与验证边界](docs/smart-search-router/protocol/README.md)
 - [中文接入](docs/smart-search-router/protocol/integration.zh-CN.md) / [English integration](docs/smart-search-router/protocol/integration.en.md)
+- [Responses 宿主规划搜索教程与 AI 算力流转图](docs/responses-host-planned-search.md)
 - [具体模型/渠道兼容矩阵](docs/smart-search-router/protocol/compatibility.md) / [验证报告](docs/smart-search-router/protocol/verification.md)
 
 消息适配族已实现并通过离线闭环；真实搜索与 MCP 单独验收。尚无真实模型凭据，具体厂商版本保持待验证，不能宣称全模型生产兼容。旧 `/search` 和后台保持兼容。

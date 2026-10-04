@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-04
+
 ### Added
 
+- 新增 Responses 宿主规划搜索教程与 AI 算力流转原理图，说明能力发现、planned/auto、工具结果回填、累计限制、凭据与费用边界，并在 README 和中文接入指南添加入口。
 - 落实全球搜索协议：新增 v1 能力/查询/计划/结果 Schema、HTTP facade 与 MCP SDK Streamable HTTP 入口，共用 Key/team 权限、配置快照、执行与结果逻辑。
 - 增加外部逐调用计划、显式查询 fallback、dry run、默认状态/来源/费用依据、限制与租户限流；SearXNG 管理员实例引擎同步与验证依据。
 - 增加 Python/TypeScript 客户端及 Responses/Chat/Anthropic/Gemini/Ollama 有界循环、流式完整组装、上下文保留、结构化/host auto 备用路径及受控 Codex experimental handler。
@@ -18,6 +21,7 @@
 
 ### Changed
 
+- 将根目录 `Prompts.md` 加入 Git 忽略规则，移除本地 Git 提交历史中的文件版本，保留本地内容；远程历史同步需强制推送重写后的分支。
 - 新功能版本从唯一配置源更新为 0.4.0；旧规则路由改用共用执行器，保留原生显式调用与后台行为。
 - 原生工具清单也按 Key/team 交集过滤；新协议错误响应统一脱敏 envelope，HTTP/MCP 断连取消子任务。
 

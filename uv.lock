@@ -227,7 +227,7 @@ source = { git = "https://github.com/huangwb8/bensz-auto-contribution.git?rev=52
 
 [[package]]
 name = "bensz-search"
-version = "0.4.0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },

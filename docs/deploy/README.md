@@ -1,6 +1,6 @@
 # 本地产品部署与维护
 
-对应 bensz-search 0.3.0 / LiteLLM 1.103.2，部署范围为单机 Docker。当前项目要求先在本机验证，未配置公网入口。
+对应 bensz-search 1.0.0 / LiteLLM 1.103.2，部署范围为单机 Docker。当前项目要求先在本机验证，未配置公网入口。
 
 ## 部署文件与运行目录
 
@@ -11,7 +11,7 @@ Dockerfile、Compose 配置、部署脚本和环境变量示例统一位于本�
 - `compose.yaml`：默认真实服务；`compose.demo.yaml`：模拟测试；`compose.live.yaml`：独立 live demo。
 - `deploy_local.py`：生成私有配置并部署；`.env.example`：环境变量示例。
 
-单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:0.3.0 .`。
+单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:1.0.0 .`。
 
 ## 初始化与登录
 
@@ -63,7 +63,7 @@ docker compose -f docs/deploy/compose.yaml start search
 
 ## 版本与验证边界
 
-版本唯一维护于 `pyproject.toml`，镜像标签对应 0.3.0。依赖由 `uv.lock` 固定，upstream 未修改。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
+版本唯一维护于 `pyproject.toml`，镜像标签对应 1.0.0。依赖由 `uv.lock` 固定，upstream 未修改。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
 
 `/health/liveliness` 是进程检查；`/ready` 是配置检查；后台“测试”才验证外部检索。当前已通过的本机验收见 [production-verification.md](../smart-search-router/production-verification.md)。商业源无凭据时只验证配置链路，公网 TLS、多节点和原生 LiteLLM DB 模式未验收。
 

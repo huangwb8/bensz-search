@@ -2,6 +2,8 @@
 
 开发者将客户端内置进应用，终端用户只新增服务 URL 和应用 Key。应用保留已有模型账号，搜索 provider 凭据留在服务端。[完整英文教程](integration.en.md)提供同一套协议与示例。
 
+使用 OpenAI Responses API 的 Chat 应用，可先阅读[宿主规划、搜索执行教程](../../responses-host-planned-search.md)：包含工具调用与结果回填的具体实现、可运行示例，以及模型推理、服务端计算与可选供应商 AI 调用的原理图。
+
 ## 直接 HTTP
 
 URL 填服务根地址，例如 `https://search.example.com`，每次请求携带 `Authorization: Bearer <应用Key>`。注册两个逻辑工具及本地可信说明，模型先发现能力，再按当前权限与查询规则生成 planned 请求，读取状态和来源后回答。普通应用也可使用 auto。

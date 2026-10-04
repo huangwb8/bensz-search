@@ -1,5 +1,6 @@
 .venv/
 .bensz-api/
+/Prompts.md
 __pycache__/
 .pytest_cache/
 .ruff_cache/
