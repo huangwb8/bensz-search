@@ -193,6 +193,8 @@ async def favicon():
 
 @app.get("/admin", include_in_schema=False)
 @app.get("/admin/", include_in_schema=False)
+@app.get("/app", include_in_schema=False)
+@app.get("/app/", include_in_schema=False)
 async def console():
     return FileResponse(static_path / "index.html", headers={"Cache-Control": "no-store"})
 

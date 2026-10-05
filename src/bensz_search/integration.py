@@ -38,6 +38,7 @@ class SearchInputMiddleware:
             for prefix in ("/search/", "/v1/search/")
         )
         is_admin = path.startswith("/admin")
+        is_console = is_admin or path in {"/app", "/app/"}
         is_protocol = path.startswith("/bensz-search/")
         error_start, error_body = None, bytearray()
 
@@ -90,7 +91,7 @@ class SearchInputMiddleware:
                     )
                     await send({"type": "http.response.body", "body": payload})
                     return
-            if message["type"] == "http.response.start" and is_admin:
+            if message["type"] == "http.response.start" and is_console:
                 headers = list(message.get("headers", []))
                 headers.extend(
                     [

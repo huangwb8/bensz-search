@@ -1,6 +1,8 @@
 # 本地产品部署与维护
 
-对应 bensz-search 1.0.1 / LiteLLM 1.103.2，部署范围为单机 Docker。本文描述本地部署；服务器及公网入口见[服务器部署说明](server-deployment.md)。
+对应 bensz-search 1.0.3 / LiteLLM 1.103.2，部署范围为单机 Docker。本文描述本地部署；服务器及公网入口见[服务器部署说明](server-deployment.md)。
+
+当前 amd64 发布产物和服务器验证见 [v1.0.3 发布验收](releases/v1.0.3.md)。
 
 ## 部署文件与运行目录
 
@@ -13,7 +15,7 @@ Dockerfile、Compose 配置、部署脚本和环境变量示例统一位于本�
 - `compose.yaml`：默认真实服务；`compose.demo.yaml`：模拟测试；`compose.live.yaml`：独立 live demo。
 - `deploy_local.py`：生成私有配置并部署；`.env.example`：环境变量示例。
 
-单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:1.0.1 .`。
+单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:1.0.3 .`。
 
 ## 初始化与登录
 
@@ -39,7 +41,7 @@ OpenAI 可直接在后台添加，填写 Key、支持 `web_search` 的模型和 
 
 管理员可增删后台用户，成员不能修改 provider/用户。登录为 12 小时 session，注销或改密后撤销会话；改密不自动撤销独立应用 key，需在访问密钥页面撤销。删除用户级联删除其会话和 key。
 
-后台生成的 key 仅能 POST 到搜索路径，默认允许当前全部启用服务；不开放原生 LiteLLM 管理路由，不提供按用户账单或原生 virtual-key DB 管理。应用应使用专属 key 而非 master key。完整 key 仅在生成时展示，列表仅保存哈希/前缀，撤销立即生效。
+后台生成的 key 可调用原生搜索 POST、v1 能力发现与搜索以及 MCP 入口，默认允许当前全部启用服务；不开放原生 LiteLLM 管理路由，不提供按用户账单或原生 virtual-key DB 管理。应用应使用专属 key 而非 master key。完整 key 仅在生成时展示，列表仅保存哈希/前缀，撤销立即生效。
 
 Cookie 为 HttpOnly/SameSite Strict；写接口检查 CSRF 与 Origin。当前纯本机 HTTP 设置 `BENSZ_SEARCH_COOKIE_SECURE=false`，将来部署 HTTPS 时设置 true。登录限速、运行指标和熔断均为单进程，当前部署不启用多 worker。
 
@@ -65,7 +67,7 @@ docker compose -f docs/deploy/compose.yaml start search
 
 ## 版本与验证边界
 
-版本唯一维护于 `pyproject.toml`，镜像标签对应 1.0.1。依赖由 `uv.lock` 固定，upstream 未修改。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
+版本唯一维护于 `pyproject.toml`，镜像标签对应 1.0.3。依赖由 `uv.lock` 固定，upstream 未修改。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
 
 `/health/liveliness` 是进程检查；`/ready` 是配置检查；后台“测试”才验证外部检索。当前已通过的本机验收见 [production-verification.md](../smart-search-router/production-verification.md)。商业源无凭据时只验证配置链路，公网 TLS、多节点和原生 LiteLLM DB 模式未验收。
 

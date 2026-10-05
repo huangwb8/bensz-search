@@ -1,99 +1,89 @@
-# bensz-search
+<div align="center">
+  <h1>bensz-search</h1>
+  <p><strong>为应用与 AI Agent 提供统一的搜索入口</strong></p>
+  <p><a href="https://github.com/huangwb8/bensz-search/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/huangwb8/bensz-search"></a> <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-blue"> <img alt="LiteLLM 1.103.2" src="https://img.shields.io/badge/LiteLLM-1.103.2-blue"> <img alt="Docker linux/amd64" src="https://img.shields.io/badge/Docker-linux%2Famd64-blue"></p>
+  <p><a href="README_EN.md">English</a> · <a href="docs/search-api-setup.md">搜索配置</a> · <a href="docs/smart-search-router/protocol/README.md">HTTP / MCP 协议</a> · <a href="docs/deploy/server-deployment.md">服务器部署</a></p>
+</div>
 
-面向 AI Agent 的智能搜索服务，基于 **LiteLLM 1.103.2 独立扩展**。提供中文登录后台、Search API 管理与测试、真实搜索调试、访问密钥和用户管理。保留原生 `POST /search`；`search_tool_name: auto` 增加任务规划、超时、fallback、去重和 weighted RRF 融合。LiteLLM 源文件改动为零。
+基于 LiteLLM 1.103.2 的独立扩展，不修改 upstream 源码。管理员连接搜索源、测试服务并管理用户；成员在个人工作台搜索并创建应用访问密钥。自动搜索按任务和约束选择服务，处理超时、fallback、去重和 weighted RRF 融合。外部 AI 可先发现能力，再提交逐引擎查询计划。
 
-## 本地部署
+当前发布 `v1.0.3`；官方镜像为 [`huangwb8/bensz-search:1.0.3`](https://hub.docker.com/r/huangwb8/bensz-search)，仅 `linux/amd64`，同时提供 `latest`。首次部署需要配置可用搜索源；商业服务需要自己的 API Key。
 
-需要 Docker Compose 2.24.4+ 与 Python 3.11+。已有支持 JSON 输出的 SearXNG 可直接接入，本机初始化默认地址为 `http://host.docker.internal:8080`。
+## 快速开始
 
-官方镜像发布于 Docker Hub：`huangwb8/bensz-search:1.0.1`（linux/amd64）。服务器部署参考[服务器部署说明](docs/deploy/server-deployment.md)，配合 `docs/deploy/docker-compose.yml`、外部代理网络与独立 SearXNG 使用；本机初始化继续使用下方脚本。
+需要 Docker Compose 2.24.4+、Python 3.11+，以及支持 JSON 输出的 SearXNG 实例或商业搜索凭据。Python 包支持 3.11–3.13；镜像使用 3.11。
 
 ```bash
 python docs/deploy/deploy_local.py
+curl --noproxy '*' http://127.0.0.1:8898/health/liveliness
+curl --noproxy '*' http://127.0.0.1:8898/ready
 ```
 
-脚本生成随机管理员密码、独立加密密钥和服务 master key，保存到不纳入 Git 的 `docs/deploy/.env`。已有配置不会被覆盖。默认运行真实服务，不运行模拟 provider；Docker 只绑定本机端口。
+脚本在私有 `docs/deploy/.env` 生成独立 master key、加密密钥和初始管理员密码，保留已有配置。打开 [管理员后台](http://127.0.0.1:8898/admin)，用初始账号 `admin` 和 `docs/deploy/.secrets/local-admin.txt` 中的密码登录；成员入口为 [用户工作台](http://127.0.0.1:8898/app)。存活检查验证进程，就绪检查验证启用配置，后台连接测试验证外部检索。
 
-- **后台**：[http://127.0.0.1:8898/admin](http://127.0.0.1:8898/admin)
-- 初始账号 `admin`，初始密码见 `docs/deploy/.secrets/local-admin.txt` 或 `docs/deploy/.env` 的 `BENSZ_SEARCH_ADMIN_PASSWORD`。
-- [存活检查](http://127.0.0.1:8898/health/liveliness)：检查进程响应。
-- [就绪检查](http://127.0.0.1:8898/ready)：检查是否有启用配置；外部可用性通过后台连接测试确认。
-- [API 文档](http://127.0.0.1:8898/api/docs)：原生 LiteLLM OpenAPI。
+默认 SearXNG 地址为 `http://host.docker.internal:8080`，需要实际运行实例或在后台配置其他来源。本地仅绑定回环端口；服务器使用[服务器 Compose](docs/deploy/docker-compose.yml)、外部代理网络与独立 SearXNG，详见[部署说明](docs/deploy/server-deployment.md)。
 
-首次登录后可在“个人设置”修改密码；修改后初始密码失效。已有用户数据库不会在重启时用 `docs/deploy/.env` 的初始密码覆盖账号。
+## 配置与工作台
 
-### 配置不同 Search API
+| 工作区 | 入口 | 能力 |
+|---|---|---|
+| 管理员后台 | `/admin` | 全局概览、Search API 配置与真实测试、用户管理、搜索及个人密钥 |
+| 用户工作台 | `/app` | 可用来源和个人密钥概览、搜索、接入指南、账号设置 |
 
-后台支持 **OpenAI Web Search、Exa、Brave、Tavily、Serper、Perplexity、SearXNG**。可配置多条同类型服务，名称必须唯一。每条配置可编辑地址、凭据、引擎及超时，启停或删除；保存后立即用于新的搜索请求，无需重启。
+管理员侧栏上下排列“管理员 / 用户”两个独立折叠区；成员只看到用户区。页面支持刷新与浏览器前进后退，右上角显示运行版本，移动端保持可用。角色和密钥归属由服务端校验。
 
-逐步操作见 [搜索 API 添加教程](docs/search-api-setup.md)：包含各供应商的 Key 申请入口、字段填写值、连接测试、应用调用示例与常见错误处理。
+支持 **OpenAI Web Search、Exa、Brave、Tavily、Serper、Perplexity、SearXNG**，可配置多个同类服务。保存后即时影响新请求；编辑时 API Key 留空保留同类型密钥，换类型不继承旧密钥。数据库仅首次导入环境配置，此后以后台设置为准。见[搜索 API 教程](docs/search-api-setup.md)。
 
-- 商业服务需要真实 API Key；地址留空使用原生 adapter 默认值。
-- OpenAI 使用 Responses `web_search`；默认模型 `gpt-4.1-mini`，支持模型、搜索上下文及输出上限设置。地址留空使用 `https://api.openai.com/v1`，结果标记 AI 生成摘要，建议超时 30000ms。详见 [OpenAI 接入说明](docs/smart-search-router/openai-web-search.md)。
-- SearXNG 需要服务地址及 JSON 输出，可指定逗号分隔的引擎。管理员可以连接内网实例。
-- 编辑时 API Key 留空保留同类型原密钥，换类型时不会沿用旧凭据。
-- “测试”执行真实查询，显示结果数、延迟及失败类别；有 HTTP 响应但无结果仍判为失败。
-- 生产模式拒绝 fixture 配置与公开 demo master key。
+OpenAI 使用 Responses `web_search`，默认 `gpt-4.1-mini`，结果标注生成摘要；见 [OpenAI 说明](docs/smart-search-router/openai-web-search.md)。SearXNG 默认列出 11 个常用引擎，需实例实际支持并启用；按任务选择子集，历史真实验收覆盖 GitHub/PubMed。见[引擎说明](docs/smart-search-router/searxng-default-engines.md)。
 
-首次启动从 `config/litellm.yaml` 和 `docs/deploy/.env` 导入服务，之后以后台数据库为准；修改 `docs/deploy/.env` 不会覆盖后台设置。凭据加密保存，接口只返回是否已配置，不返回完整 provider key。
+## 调用搜索与 AI 接入
 
-本机初始化默认选择 SearXNG 的 11 个常用引擎：Google、Bing、DuckDuckGo、Brave、百度、Wikipedia、GitHub、Stack Overflow、PubMed、arXiv 与 Google News；实例上也需启用对应引擎。后台编辑时可一键填入该列表，并按实例实际可用情况增删；留空使用实例默认。自动路由按意图选择已配置子集：学术查询优先 PubMed/arXiv 等学术引擎，代码意图优先 GitHub/Stack Overflow，新闻与通用查询使用网页引擎。历史真实验收覆盖 GitHub/PubMed，扩充的常用列表属于默认配置，不宣称全部引擎已实测。公共引擎可能 CAPTCHA/限流，不能以空结果当作成功。没有商业 key 时，不宣称商业源已实测通过。
-
-### 用户与访问密钥
-
-管理员管理服务并创建/删除后台用户；成员可搜索、管理自己的 key 和修改密码。服务端强制执行权限，成员看不到完整连接配置或其他用户的路由历史。
-
-登录使用 HttpOnly / SameSite Cookie、跨站请求保护和登录限速。密码使用 scrypt 哈希，session 与访问 key 不以明文保存。在“访问密钥”创建应用专属 key，完整值只显示一次，撤销立即生效。后台密码与应用 key 分离。
-
-## 调用搜索 API
-
-将后台生成的 key 注入应用环境变量，发送 POST 请求：
+在“访问密钥”创建应用专属 key，注入 `BENSZ_SEARCH_API_KEY`。完整值只显示一次，撤销立即生效；应用 key 与登录密码分离。
 
 ```bash
 curl --noproxy '*' http://127.0.0.1:8898/search \
   -H "Authorization: Bearer ${BENSZ_SEARCH_API_KEY}" \
   -H 'Content-Type: application/json' \
-  -d '{
-    "query": "colorectal cancer ctDNA",
-    "search_tool_name": "auto",
-    "profile": {"type": "scientific_research", "domain": "biomedical"},
-    "max_results": 5,
-    "constraints": {"latency_budget_ms": 15000},
-    "debug": true
-  }'
+  -d '{"query":"colorectal cancer ctDNA","search_tool_name":"auto","profile":{"type":"scientific_research","domain":"biomedical"},"max_results":5,"constraints":{"latency_budget_ms":15000},"debug":true}'
 ```
 
-默认响应保留 `{"object":"search","results":[...]}`。debug 增加意图、计划、理由、attempts、错误类别、延迟、预估费用、来源 overlap 和融合贡献，不包含原始 query/profile_prompt。
+原生响应保持 `{"object":"search","results":[...]}`。debug 增加计划、执行、错误分类、预估费用、来源重叠和融合贡献，不返回原始 query/profile_prompt。
 
-| 调用 | 行为 |
+| 入口 | 用途 |
 |---|---|
-| `POST /search` 或 `/v1/search`，只有 query | 默认工具 auto |
-| body `search_tool_name: "<配置名称>"` | 显式调用，保留 provider-specific 搜索参数 |
-| `POST /search/<名称>` 或 `/v1/search/<名称>` | 路径参数优先 |
-| `search_tool_name: "auto"` 或 `/search/auto` | 智能规划、融合与 fallback |
-| `GET /` 或 `/search` | 引导到后台，执行搜索使用 POST |
-| `GET /smart-search/metrics` | 仅原生 proxy admin/admin viewer |
-| `POST /smart-search/feedback` | 仅原生 proxy admin |
+| `POST /search`、`/v1/search` | 自动路由，或指定 `search_tool_name` |
+| `POST /search/<name>`、`/v1/search/<name>` | 路径中的工具名称优先 |
+| `GET /bensz-search/v1/capabilities` | 按 key 权限发现工具与已验证引擎 |
+| `POST /bensz-search/v1/search` | `auto` 或外部 `planned`，支持零调用 `dry_run` |
+| `/bensz-search/mcp/` | MCP SDK Streamable HTTP，每个请求携带 Bearer key |
+| `GET /bensz-search/v1/schema` | 公开静态请求 Schema |
 
-后台应用 key 仅允许原生搜索 POST 接口，不能访问 LiteLLM 的 key/config 管理路由；可搜索全部启用配置。master key 不作为普通应用凭据。自有 key 由 SQLite 持久化，未启用原生 LiteLLM DB virtual-key/spend 持久化。
+应用 key 可搜索及发现能力，不能访问后台或原生 LiteLLM key/config 管理路由。GET `/`、`/search` 引导至后台，搜索使用 POST。原生请求支持最多 10 项 query、1–20 个结果及 profile/constraints/fusion；具体参数、预算与鉴权见[协议规范](docs/smart-search-router/protocol/README.md)。
 
-自动请求支持 query（字符串或最多 10 项列表）、max_results（1–20）、search_domain_filter、max_tokens_per_page、country，以及 profile/profile_prompt/constraints/debug/fusion。客户端不得覆盖服务凭据、api_base、headers 或内部 metadata。所有搜索路径与后台写请求限制到 128KB。
+宿主负责模型工具闭环，服务负责鉴权、预算、实际搜索和结果归一化，provider 凭据保留在后台。Python/TypeScript 客户端支持五种模型消息族，已通过离线闭环；真实搜索与 MCP 单独验证，具体真实模型/渠道以兼容矩阵为准。
 
-constraints：freshness 为 auto/any/day/week/month/year；authority/recall/precision/semantic/source_diversity/latency/cost 为 auto/low/medium/high。latency_budget_ms 为 100–60000，cost_budget_usd 为 0–10。数字预算覆盖类别预算，模型见 [models.py](src/bensz_search/models.py)。
+- [中文接入](docs/smart-search-router/protocol/integration.zh-CN.md) / [English integration](docs/smart-search-router/protocol/integration.en.md)
+- [Responses 宿主规划搜索与算力流转](docs/responses-host-planned-search.md)
+- [兼容矩阵](docs/smart-search-router/protocol/compatibility.md) / [协议验证](docs/smart-search-router/protocol/verification.md)
+- [TypeScript 客户端](clients/typescript/README.md) / [Python 客户端](src/bensz_search/client.py)
 
-## 数据与维护
+## 部署与维护
 
-SQLite 位于 Docker `search-data` 数据卷，用户、session、provider 和应用 key 在重启/重建后保留。`docs/deploy/.env` 的 `BENSZ_SEARCH_SECRET` 是加密密钥，必须与数据库一起备份，不能在重启时重新生成。
+本地 SQLite 使用 `search-data` named volume；服务器使用项目内 bind mounts。用户、会话、应用 key 和加密 provider 设置持久化；进程指标、熔断和历史计数重启清空。备份数据库须同时保留匹配的 `BENSZ_SEARCH_SECRET`，不能重新生成加密密钥。
 
 ```bash
-# 重建镜像，保留数据
 docker compose -f docs/deploy/compose.yaml up -d --build --wait
 docker compose -f docs/deploy/compose.yaml ps
 ```
 
-备份时停止服务，复制整个 `/app/data` 并妥善保存 `docs/deploy/.env`，然后重新启动。不要用 `docker compose -f docs/deploy/compose.yaml down -v` 日常重启，它会删除数据卷。详见 [部署说明](docs/deploy/README.md)。
+服务器在 `/docker/bensz-search` 先备份旧镜像 ID、Compose 和私有配置，再仅更新搜索服务：
 
-默认非 root 容器、移除 Linux capabilities、禁止权限提升，限制内存/并发/PID/日志。本次是单机单进程部署；运行指标、熔断、历史重启清空，配置与身份持久化。公网 HTTPS 反向代理的登录与 Cookie 配置见[服务器部署说明](docs/deploy/server-deployment.md)；多节点部署需另行验证。
+```bash
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.3 docker compose -f docker-compose.yml pull search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.3 docker compose -f docker-compose.yml up -d --no-deps --wait search
+```
+
+容器非 root，限制内存、并发、PID 和日志。当前单机单进程，未验收多实例状态共享。不要用 `down -v` 日常重启。HTTPS 部署启用 Secure Cookie，并只信任实际代理 IP 的转发头。备份、恢复和代理设置见[本地部署](docs/deploy/README.md)和[服务器部署](docs/deploy/server-deployment.md)。
 
 ## 开发与验证
 
@@ -102,49 +92,18 @@ sh scripts/uv.sh sync --extra dev
 sh scripts/uv.sh run pytest -q
 sh scripts/uv.sh run ruff check src tests demo scripts docs/deploy
 sh scripts/uv.sh run ruff format --check src tests demo scripts docs/deploy
+node --check src/bensz_search/static/app.js
 ```
 
-开发命令统一使用 `scripts/uv.sh`，入口将虚拟环境固定在 `.bensz-api/.venv/`，uv 依赖缓存放在 `.bensz-api/uv-cache/`；pytest 与 Ruff 配置分别将缓存固定在 `.bensz-api/.pytest_cache/` 和 `.bensz-api/.ruff_cache/`。直接执行原生 `uv sync` / `uv run` 不会加载该入口设置，会使用 uv 默认的根目录 `.venv/`。
-
-60 条路由 benchmark 位于 [routing.json](tests/benchmarks/routing.json)，允许多个合理 provider。其余测试覆盖原生 API、权限、融合、fallback、登录/CSRF/撤销、配置热更新、加密和持久化。真实外部检索及后台浏览器证据见 [0.2 验收记录](docs/smart-search-router/production-verification.md)。
-
-### 协议开发用模拟环境
-
-fixture 仅用于开发测试，使用独立项目/端口避免覆盖真实服务：
-
-```bash
-BENSZ_SEARCH_PORT=8900 LITELLM_MASTER_KEY=sk-bensz-search-local-demo \
-  docker compose -f docs/deploy/compose.yaml -p bensz-search-fixtures -f docs/deploy/compose.demo.yaml up -d --build --wait
-LITELLM_MASTER_KEY=sk-bensz-search-local-demo \
-  sh scripts/uv.sh run python scripts/demo.py --base-url http://127.0.0.1:8900
-```
-
-模拟结果标注 `DEMO FIXTURE`。旧 8899 live demo 独立于当前 8898 产品部署，不作为主入口。
+入口将 Python 环境、uv/pytest/Ruff 缓存固定在 `.bensz-api/`。版本唯一源为 `pyproject.toml`，依赖由 `uv.lock` 固定。60 条[路由 benchmark](tests/benchmarks/routing.json)允许多个合理 provider；测试覆盖 API、权限、融合、fallback、持久化及工作台入口。fixture 用法见[部署文档](docs/deploy/README.md)，不能以模拟结果代替真实供应商验收。
 
 ## 文档与边界
 
-- [跨模型协议现状审计](docs/smart-search-router/protocol-readiness-audit.md)与[全球主流 LLM 接入优化计划](docs/plans/2026-10-03-global-llm-search-protocol.md)：公开搜索 API 与工具契约，直接 HTTP 和 MCP 入口共用搜索服务，应用内置接入且用户仅配置入口 URL/凭据；实施前审计保留历史依据；现有实现、机器契约和验收边界见[协议交付](docs/smart-search-router/protocol/README.md)。
-- [Upstream 审计](docs/smart-search-router/architecture-audit.md)、[设计](docs/smart-search-router/proposed-design.md)、[当前实施计划](docs/plans/2026-10-02-production-admin.md)。
-- 六意图：general、news、academic、deep、people、coding。profile_prompt 使用有限规则，未提供完整自然语言 planner。
-- 预估成本是配置先验，不是供应商账单；严格 freshness 过滤无日期结果；authority 是排序偏好，不能保证证据等级。
-- SQLite 适合当前单实例，未验收多节点或原生 LiteLLM virtual-key DB/Redis 模式。
-- 升级 LiteLLM 前重新审计、更新 lock，并验证后台/API 和实际检索；扩展不修改 upstream 源码。
+- [调用链审计](docs/smart-search-router/architecture-audit.md)：依据 LiteLLM 1.103.2 发行包，未取得 upstream Git commit。
+- [界面验收](docs/smart-search-router/series-ui-verification.md) / [早期真实产品验收](docs/smart-search-router/production-verification.md)
+- [变更记录](CHANGELOG.md) / [协作规则](AGENTS.md) / [贡献账本](docs/contribution.bac)
+- 问题与反馈：[GitHub Issues](https://github.com/huangwb8/bensz-search/issues)。历史计划保留原基线，当前能力以源码、协议和验证记录为准。
 
-## English overview
+预估费用来自配置先验，不是供应商账单。规则 planner 支持六种意图，尚无服务端 LLM planner。外部结果不可信，生成摘要不等于证据；provider 多样性不保证底层来源独立。供应商可达性、限流和真实模型版本须逐项验证，不宣称全模型生产兼容。
 
-**bensz-search** is a task-aware search service on LiteLLM 1.103.2 with no upstream source changes. Version 1.0 delivers the versioned global search protocol: capability discovery, external AI planned search, default provenance/status, embedded Python/TypeScript clients and an MCP Streamable HTTP entrance, on top of OpenAI Responses web search with citations (0.3) and the Chinese console with authenticated users, encrypted persistent provider settings, live tests and revocable API keys (0.2). Official images are published as `huangwb8/bensz-search` on Docker Hub (linux/amd64).
-
-Run `python docs/deploy/deploy_local.py` (or `docker pull huangwb8/bensz-search:1.0.1` for server deployments), open `http://127.0.0.1:8898/admin`, and read initial credentials from the ignored `docs/deploy/.secrets/local-admin.txt`. The default deployment performs real retrieval through an existing SearXNG instance; commercial providers require operator-supplied keys. Configuration and identities persist in a Docker volume. Telemetry/circuit breakers remain process-local. Remote hosting and TLS are outside this local deployment.
-
-## 全球 LLM 搜索协议 / Global LLM search protocol
-
-新增版本化能力发现、外部 AI 分引擎计划、默认执行状态/来源、Python 与 TypeScript 内置客户端、五种模型消息族和 MCP Streamable HTTP 入口。应用终端用户新增配置仍为搜索 URL/应用 Key；服务使用应用已有 AI，provider 凭据留在后台。
-
-- [协议规范、机器 Schema 与验证边界](docs/smart-search-router/protocol/README.md)
-- [中文接入](docs/smart-search-router/protocol/integration.zh-CN.md) / [English integration](docs/smart-search-router/protocol/integration.en.md)
-- [Responses 宿主规划搜索教程与 AI 算力流转图](docs/responses-host-planned-search.md)
-- [具体模型/渠道兼容矩阵](docs/smart-search-router/protocol/compatibility.md) / [验证报告](docs/smart-search-router/protocol/verification.md)
-
-消息适配族已实现并通过离线闭环；真实搜索与 MCP 单独验收。尚无真实模型凭据，具体厂商版本保持待验证，不能宣称全模型生产兼容。旧 `/search` 和后台保持兼容。
-
-Versioned capabilities/planned search, default provenance/status, embedded Python/TypeScript clients, five model message families and an MCP entrance are implemented. Model-family fixtures pass offline; specific live model/channel versions remain unverified. See the English guide and matrix above.
+仓库尚无独立 LICENSE 文件，不据此声明开源许可；LiteLLM 及其他依赖遵循各自许可。

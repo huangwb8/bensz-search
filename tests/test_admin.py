@@ -59,6 +59,20 @@ def test_browser_entries_redirect_without_search_credentials(console, path):
     assert console.get("/admin/api/session").status_code == 401
 
 
+@pytest.mark.parametrize("path", ["/admin", "/admin/", "/app", "/app/"])
+def test_workspace_entries_keep_session_api_protected(console, path):
+    response = console.get(path)
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "no-store" in response.headers["cache-control"].split(", ")
+    assert "nosniff" in response.headers["x-content-type-options"].split(", ")
+    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+    assert console.get("/admin/api/session").status_code == 401
+    login(console)
+    assert console.get(path).status_code == 200
+    assert console.get("/admin/api/session").json()["user"]["role"] == "admin"
+
+
 @pytest.mark.parametrize("trusted_hosts, expected", [("127.0.0.1", 403), ("172.18.0.22", 200)])
 def test_https_login_behind_proxy(console, monkeypatch, trusted_hosts, expected):
     from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -121,6 +135,8 @@ def test_member_permissions_and_key_ownership(console):
     assert response.status_code == 200
     admin_key = console.post("/admin/api/keys", headers=admin_headers, json={"name": "admin-key"}).json()
     member_headers = login(console, "member", "member-password-strong")
+    assert console.get("/app").status_code == 200
+    assert console.get("/admin/api/session").json()["user"]["role"] == "member"
     assert console.get("/admin/api/users").status_code == 403
     assert console.get("/admin/api/providers").status_code == 403
     assert (

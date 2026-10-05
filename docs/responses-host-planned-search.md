@@ -1,5 +1,7 @@
 # 用宿主 Responses 模型规划搜索，用 bensz-search 执行搜索
 
+> 本指南适用于当前 1.0.3；下文保留协议初次交付时的源码基线。此次界面与工作台更新未改变 Responses 工具契约，真实模型验证边界仍按兼容矩阵披露。
+
 本教程面向已经使用 OpenAI Responses API 的 Chat 应用开发者，解释“宿主的 Responses 模型负责思考和规划，bensz-search 负责执行搜索”如何通过函数工具实现，并给出可以复用现有项目代码的接入示例。
 
 依据：2026-10-04 的项目源码，项目包版本 `1.0.0`，锁定的 upstream 为 **LiteLLM 1.103.2 发行包**；没有取得该发行包对应的 upstream Git commit。本文涉及的 Responses 消息适配和工具闭环已有离线验证，具体 OpenAI 模型与真实搜索的完整闭环仍待凭据验证。
