@@ -3,6 +3,7 @@
 import os
 import secrets
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from litellm.llms.base_llm.search.transformation import SearchResponse, SearchResult
@@ -46,6 +47,40 @@ def login(client, username="admin", password="test-password-strong"):
     response = client.post("/admin/api/login", json={"username": username, "password": password})
     assert response.status_code == 200, response.text
     return {"X-CSRF-Token": response.json()["csrf_token"]}
+
+
+@pytest.mark.parametrize(
+    "message, category",
+    [("Not enough credits", "quota"), ("Invalid query", "bad_request")],
+)
+def test_serper_test_classifies_real_http_error(console, monkeypatch, message, category):
+    headers = login(console)
+    assert (
+        console.post(
+            "/admin/api/providers",
+            headers=headers,
+            json={"name": "Serper", "provider": "serper", "api_key": "test-provider-secret"},
+        ).status_code
+        == 200
+    )
+    requests = []
+
+    async def send(self, request, **kwargs):
+        assert str(request.url) == "https://google.serper.dev/search"
+        requests.append(request)
+        return httpx.Response(400, json={"message": message, "statusCode": 400}, request=request)
+
+    monkeypatch.setattr(httpx.AsyncClient, "send", send)
+    response = console.post("/admin/api/providers/Serper/test", headers=headers, json={"query": "三体"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert data["category"] == category
+    assert data["result_count"] == 0
+    assert data["results"] == []
+    assert len(requests) == 1
+    assert "test-provider-secret" not in response.text
+    assert message not in response.text
 
 
 @pytest.mark.parametrize("path", ["/", "/search", "/v1/search"])

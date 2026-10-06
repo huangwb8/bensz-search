@@ -1,15 +1,60 @@
 import asyncio
 
 import pytest
+from litellm.exceptions import BadRequestError
 from litellm.llms.base_llm.search.transformation import SearchResponse, SearchResult
 
-from bensz_search.models import SearchRequest
+from bensz_search.models import SearchRequest, SearchTask
 from bensz_search.registry import Registry
 from bensz_search.router import SearchFailed, SmartRouter
 
 
 def response(url="https://example.com/result"):
     return SearchResponse(results=[SearchResult(title="A valid document", url=url, snippet="fixture")])
+
+
+async def test_serper_credit_exhaustion_falls_back_and_opens_circuit():
+    from bensz_search.executor import ExecutionCall, execute
+
+    calls = []
+
+    async def call(**kwargs):
+        name = kwargs["search_tool_name"]
+        calls.append(name)
+        if name == "serper":
+            raise BadRequestError(
+                'SerperException - {"message":"Not enough credits","statusCode":400}',
+                llm_provider="serper",
+                model="serper/search",
+            )
+        return response()
+
+    router = SmartRouter(Registry.load("config/capabilities.yaml"), call)
+    task = SearchTask(query="三体")
+    primary = ExecutionCall("primary", "serper", "三体", 3, task=task)
+    primary.fallbacks = [ExecutionCall("fallback", "brave", "三体", 3, task=task)]
+    buckets, attempts, _ = await execute(router, [primary], 10000, 1, "serper-quota-test")
+    assert calls == ["serper", "brave"]
+    assert buckets["fallback"]
+    assert [a["status"] for a in attempts] == ["quota", "success"]
+    assert attempts[1]["fallback"] is True
+    assert not router.health.available("serper")
+    assert router.health.state("serper").open_until - router.health.clock() > 290
+
+
+@pytest.mark.parametrize(
+    "provider, message",
+    [
+        ("serper", 'SerperException - {"message":"Invalid query"}'),
+        ("serper", 'Invalid query "Not enough credits"'),
+        ("tavily", '{"message":"Not enough credits"}'),
+    ],
+)
+def test_serper_quota_classification_does_not_mask_other_bad_requests(provider, message):
+    from bensz_search.executor import failure_category
+
+    error = BadRequestError(message, llm_provider=provider, model=f"{provider}/search")
+    assert failure_category(error) == "bad_request"
 
 
 async def test_fallback_and_auth_no_retry():

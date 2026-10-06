@@ -1,6 +1,7 @@
 """One execution primitive for legacy rules and the versioned search protocol."""
 
 import asyncio
+import re
 import time
 from dataclasses import dataclass, field
 from uuid import uuid4
@@ -15,7 +16,14 @@ def failure_category(error):
     status = getattr(error, "status_code", None)
     if status in {401, 403}:
         return "auth"
-    if status == 402:
+    # Serper reports exhausted credits as HTTP 400; LiteLLM keeps the JSON
+    # message in BadRequestError but replaces the original response body.
+    serper_quota = (
+        status == 400
+        and getattr(error, "llm_provider", None) == "serper"
+        and re.search(r'"message"\s*:\s*"not enough credits"', str(error), re.IGNORECASE)
+    )
+    if status == 402 or serper_quota:
         return "quota"
     if status == 429:
         return "rate_limit"

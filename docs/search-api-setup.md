@@ -94,6 +94,8 @@ OpenAI 会收取搜索和模型费用；返回引用与来源链接，AI 生成�
 
 Serper 使用自己的 API Key。不要填 SerpAPI、Google Cloud 或 Google Programmable Search 的密钥；它们属于其他服务。虽然接口域名包含 `google`，这里不需要填写 Google 搜索引擎 ID（`cx`）。
 
+如果测试显示“服务额度不足”，请到 Serper 控制台检查该 Key 所属账号的余额并充值，或换用有额度的 Key。Serper 的 `Not enough credits` 会返回 HTTP 400；从 1.0.4 起，项目将它识别为 `quota`，自动搜索可回退到其他已授权来源，并对该来源冷却 5 分钟。后台连接测试可直接重试，不受自动路由冷却影响。旧版本可能只显示 `bad_request`，这类报错需要区分额度耗尽与真正的参数错误。
+
 ## Perplexity：接入 Search API
 
 1. 打开 [Perplexity API 控制台](https://console.perplexity.ai/)，注册或登录。
