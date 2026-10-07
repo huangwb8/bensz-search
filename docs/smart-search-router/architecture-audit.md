@@ -44,6 +44,12 @@ LiteLLM Router 已经支持同工具名匹配、retry/fallback 和原生回调�
 
 协议依据：[官方 Web search 文档](https://developers.openai.com/api/docs/guides/tools-web-search)，2026-10-03 已实际读取。使用 `web_search`、强制 `tool_choice: required`、`include: [web_search_call.action.sources]`；只转换结构化 url_citation 和 sources。模型生成摘要带 `snippet_kind: generated_summary`，只有链接的来源带 `source_only`，不补造日期或网页正文。最多一次内置工具调用、配置输出上限、不存储 Responses 对话。搜索结果数量是上限，模型和工具实际账单不可由能力表估算精确约束。
 
+## bensz-search 实例搜索源补充审计
+
+2026-10-07，依据同一 **LiteLLM 1.103.2 发行包**与当前项目源码。`bensz_search` 同样不属于 upstream SearchProviders 枚举；沿用 `openai_search.py:provider_call` 的实例级分派入口，调用独立 `federated_search.py:search`，不修改 upstream。远端先经 v1 capabilities 验证联邦支持与权限，再执行 v1 auto 搜索；使用服务端独立配置的访问密钥，不传递本地用户和 metadata。
+
+`integration.py:SearchInputMiddleware` 包装 `federation.py:FederationMiddleware`，为原生、v1、MCP 和后台调试绑定调用链上下文；`executor.py:execute` 共用截止时间、估算预留、熔断与互不重叠的子树调用额度。`fusion.py:fuse` 与 `protocol_results.py:normalize_results` 保留远端叶子来源并抑制重复 source family 贡献。原生 `/search` 结果字段是兼容的增量；v1 Source 增加可选路径与叶子工具字段，静态协议文件同步生成。真实第三方费用、来源独立性与协议遵守不属于可证明边界，见[实例组合说明](federated-search.md)。
+
 ## 鉴权、预算和日志边界
 
 原生 HTTP 的公共处理保留回调与日志路径，物理 provider 调用复用 LiteLLM 的运行机制。项目成本上限是每逻辑请求的配置估算，不能等同于供应商账单，也不是跨用户全局预算。

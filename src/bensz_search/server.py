@@ -44,7 +44,7 @@ def effective_config():
             and not os.getenv(credential.split("/", 1)[1])
         ):
             continue
-        if params.get("search_provider") == "searxng":
+        if params.get("search_provider") in {"searxng", "bensz_search"}:
             base = params.get("api_base", "")
             if not base or (base.startswith("os.environ/") and not os.getenv(base.split("/", 1)[1])):
                 continue

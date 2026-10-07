@@ -62,6 +62,7 @@ CATALOG = [
         "default_api_base": "",
         "default_engines": list(DEFAULT_ENGINES),
     },
+    {"provider": "bensz_search", "label": "bensz-search", "requires_api_key": True, "default_api_base": ""},
 ]
 
 
@@ -116,8 +117,12 @@ class ProviderInput(StrictModel):
     def known_provider(self):
         if self.provider not in {row["provider"] for row in CATALOG}:
             raise ValueError("Unsupported search provider")
-        if self.provider == "searxng" and not self.api_base:
-            raise ValueError("SearXNG requires an API base URL")
+        if self.provider in {"searxng", "bensz_search"} and not self.api_base:
+            raise ValueError("This provider requires an API base URL")
+        if self.provider == "bensz_search":
+            from .federated_search import base_url
+
+            base_url(self.api_base)
         if self.verified_engines and (
             self.provider != "searxng"
             or not self.engine_evidence
@@ -190,6 +195,8 @@ class AdminRuntime:
                 params[key] = record[key]
         if record.get("engines"):
             params["engines"] = ",".join(record["engines"])
+        if record["provider"] == "bensz_search":
+            params["timeout"] = record["timeout_ms"] / 1000
         if record["provider"] == "openai":
             params.update(
                 search_model=record.get("search_model", DEFAULT_MODEL),
@@ -478,7 +485,17 @@ async def search(data: SearchRequest, session=Depends(current_session), runtime=
                     search_domain_filter=data.search_domain_filter,
                     country=data.country,
                     max_tokens_per_page=data.max_tokens_per_page,
+                    timeout=min(record["timeout_ms"], data.constraints.latency_budget_ms or 15000) / 1000,
                     num_retries=0,
+                    **(
+                        {
+                            "profile": data.profile.model_dump(),
+                            "constraints": data.constraints.model_dump(),
+                            "fusion": data.fusion,
+                        }
+                        if record["provider"] == "bensz_search"
+                        else {}
+                    ),
                 ),
                 min(record["timeout_ms"], data.constraints.latency_budget_ms or 15000) / 1000,
             )

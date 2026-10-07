@@ -7,7 +7,9 @@
 
 A standalone extension on LiteLLM 1.103.2 with no upstream source changes. Administrators configure and test providers and manage users; members search and create application keys in a personal workspace. Automatic search selects providers from task requirements and constraints, with timeouts, fallback, deduplication and weighted RRF fusion. External AI hosts can discover capabilities and submit individual engine queries.
 
-Current release: `v1.0.3`. The official image is [`huangwb8/bensz-search:1.0.3`](https://hub.docker.com/r/huangwb8/bensz-search), available for `linux/amd64` only, with a matching `latest` tag. Operators must configure usable providers; commercial services require their own API Key.
+Current release: `v1.0.4`. The official image is [`huangwb8/bensz-search:1.0.4`](https://hub.docker.com/r/huangwb8/bensz-search), available for `linux/amd64` only, with a matching `latest` tag. Operators must configure usable providers; commercial services require their own API Key.
+
+`v1.0.4` adds native bensz-search providers: compose remote instances recursively with cycle detection, bounded calls and deadlines, and leaf-source deduplication. Configure the remote base URL and an independent application key in Search API. All participating instances must support federation. See [configuration and limits](docs/smart-search-router/federated-search.md).
 
 ## Quick start
 
@@ -32,7 +34,7 @@ The default SearXNG URL is `http://host.docker.internal:8080`; run a real instan
 
 Administrators see vertically arranged, independently collapsible administrator/member navigation sections; members see only their personal section. Pages support refresh and browser history, the top bar shows the running version, and mobile navigation remains available. The server enforces roles and key ownership.
 
-Supports **OpenAI Web Search, Exa, Brave, Tavily, Serper, Perplexity and SearXNG**, including multiple instances per provider type. Saved settings apply to new requests immediately. Leaving an API Key blank preserves it for the same provider type; changing type does not inherit credentials. Environment configuration is imported only when the database is initialized. See the [search setup guide](docs/search-api-setup.md).
+Supports **OpenAI Web Search, Exa, Brave, Tavily, Serper, Perplexity, SearXNG and bensz-search**, including multiple instances per provider type. Saved settings apply to new requests immediately. Leaving an API Key blank preserves it for the same provider type; changing type does not inherit credentials. Environment configuration is imported only when the database is initialized. See the [search setup guide](docs/search-api-setup.md).
 
 OpenAI uses Responses `web_search`, defaults to `gpt-4.1-mini`, and labels generated summaries; see the [OpenAI guide](docs/smart-search-router/openai-web-search.md). SearXNG defaults list 11 common engines that must be supported and enabled by the instance; task routing selects subsets. Historical live verification covers GitHub/PubMed. See [engine settings](docs/smart-search-router/searxng-default-engines.md).
 
@@ -79,8 +81,8 @@ docker compose -f docs/deploy/compose.yaml ps
 For server upgrades, back up the previous image ID, Compose file and private settings in `/docker/bensz-search`, then update only the search service:
 
 ```bash
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.3 docker compose -f docker-compose.yml pull search
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.3 docker compose -f docker-compose.yml up -d --no-deps --wait search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.4 docker compose -f docker-compose.yml pull search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.4 docker compose -f docker-compose.yml up -d --no-deps --wait search
 ```
 
 Containers run as non-root with memory, concurrency, PID and log limits. Deployment is currently a single process on one host; shared multi-instance state is unverified. Do not use `down -v` for routine restarts. HTTPS hosting requires Secure Cookie settings and forwarded-header trust restricted to actual proxy IPs. See [local deployment](docs/deploy/README.md) and [server deployment](docs/deploy/server-deployment.md) for backups, recovery and proxy settings.
@@ -95,7 +97,7 @@ sh scripts/uv.sh run ruff format --check src tests demo scripts docs/deploy
 node --check src/bensz_search/static/app.js
 ```
 
-The wrapper keeps the Python environment and uv/pytest/Ruff caches in `.bensz-api/`. `pyproject.toml` is the authoritative version; `uv.lock` fixes dependencies. The 60-case [routing benchmark](tests/benchmarks/routing.json) accepts multiple reasonable providers. Tests cover API compatibility, permissions, fusion, fallback, persistence and workspace entries. See [deployment documentation](docs/deploy/README.md) for fixtures; mock results do not establish live supplier availability.
+The wrapper keeps the Python environment and uv/pytest/Ruff caches in `.bensz-api/`; the versioned dependency lockfile is [`.bensz-api/uv.lock`](.bensz-api/uv.lock). Because uv requires a root lockfile, the wrapper creates a temporary symlink and removes it on exit. Use the commands above and run only one wrapper command at a time per project. The wrapper requires `python3` on macOS/Linux. `pyproject.toml` is the authoritative version. The 60-case [routing benchmark](tests/benchmarks/routing.json) accepts multiple reasonable providers. Tests cover API compatibility, permissions, fusion, fallback, persistence and workspace entries. See [deployment documentation](docs/deploy/README.md) for fixtures; mock results do not establish live supplier availability.
 
 ## Documentation and limits
 

@@ -67,7 +67,7 @@ docker compose -f docs/deploy/compose.yaml start search
 
 ## 版本与验证边界
 
-版本唯一维护于 `pyproject.toml`，镜像标签对应 1.0.3。依赖由 `uv.lock` 固定，upstream 未修改。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
+版本唯一维护于 `pyproject.toml`，镜像标签对应 1.0.4。依赖由纳入版本控制的 `.bensz-api/uv.lock` 固定，upstream 未修改。Docker 构建上下文只放行该锁文件，继续排除 `.bensz-api/` 内的环境、缓存及任务材料；两个 Dockerfile 均通过 `scripts/uv.sh` 安装依赖。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
 
 `/health/liveliness` 是进程检查；`/ready` 是配置检查；后台“测试”才验证外部检索。当前已通过的本机验收见 [production-verification.md](../smart-search-router/production-verification.md)。商业源无凭据时只验证配置链路，公网 TLS、多节点和原生 LiteLLM DB 模式未验收。
 

@@ -134,6 +134,7 @@ def fuse(
                     "rank": getattr(result, "original_rank", rank),
                     "snippet_kind": getattr(result, "snippet_kind", "search_summary"),
                     "date": result.date,
+                    "upstream_sources": getattr(result, "upstream_sources", []),
                 }
             )
             if result.url not in document["aliases"]:
@@ -142,9 +143,14 @@ def fuse(
                 document["providers"].append(provider)
             weight = weights.get(provider, 1) if mode == "weighted_rrf" else 1
             contribution = weight / (k + rank)
-            family = families.get(provider, provider)
+            leaf_families = getattr(result, "source_families", None) or [families.get(provider, provider)]
             if not duplicate:
-                document["families"][family] = max(document["families"].get(family, 0), contribution)
+                # An aggregate gets one vote split across its declared leaf families.
+                # Two remote instances backed by the same source never create two votes.
+                for family in leaf_families:
+                    document["families"][family] = max(
+                        document["families"].get(family, 0), contribution / len(leaf_families)
+                    )
                 document["contributions"][provider] = contribution
             for field in ("snippet", "date", "last_updated"):
                 if not getattr(document["result"], field) and getattr(result, field):
@@ -152,6 +158,27 @@ def fuse(
                     if field == "snippet":
                         document["result"].snippet_kind = getattr(result, "snippet_kind", "search_summary")
     values = list(documents.values())
+    for document in values:
+        document["result"].source_families = sorted(document["families"])
+        # Preserve every merged branch for legacy responses and the next federation hop.
+        document["result"].upstream_sources = [
+            source
+            for item in document["sources"]
+            for source in (
+                item["upstream_sources"]
+                or [
+                    {
+                        "source_family": families.get(item["provider"], item["provider"]),
+                        "snippet_kind": item["snippet_kind"],
+                        "date": item["date"],
+                        "upstream_tool_id": item["provider"],
+                        "upstream_call_id": item["provider"],
+                        "upstream_rank": item["rank"],
+                        "instance_path": [],
+                    }
+                ]
+            )
+        ][:30]
     if mode != "none":
         values.sort(key=lambda d: (-sum(d["families"].values()), d["index"]))
     trace = [

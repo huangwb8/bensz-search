@@ -57,6 +57,7 @@
   - Skill 开发规范以 `huangwb8/skills` 仓库的 `AGENTS.md` 为主，并配合该仓库的 `docs/templates` 执行
   - 通用 Skill 不应复制到此目录；项目专属 Skill 应保持最小范围、明确触发边界，并遵守路径安全、敏感信息保护和验证要求
 - `./.bensz-api/.venv`：本地 Python 环境，不纳入版本控制；BAC 工具要求 Python 3.10+。开发使用 `sh scripts/uv.sh sync --extra dev` 与 `sh scripts/uv.sh run ...`，入口固定 `UV_PROJECT_ENVIRONMENT` 和项目内 uv 缓存路径。
+- `./.bensz-api/uv.lock`：正式依赖锁文件，纳入版本控制；必须通过 `sh scripts/uv.sh ...` 调用 uv。入口需要 `python3`（macOS/Linux），运行期间临时创建根目录锁文件链接，退出后清理；同一项目的入口命令不可同时运行。
 - `./.bensz-api/.pytest_cache`、`./.bensz-api/.ruff_cache`：测试与静态检查缓存，由 `pyproject.toml` 固定目录；不得在项目根目录创建 `.venv`、`.pytest_cache` 或 `.ruff_cache`。
 - 正式交付物、源码和正式计划按上述约定保存，不写入临时任务工作区
 

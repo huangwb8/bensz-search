@@ -6,6 +6,7 @@ from litellm.llms.base_llm.search.transformation import SearchResponse
 
 from .executor import ExecutionCall, execute
 from .executor import failure_category as failure_category
+from .federation import bounded_task
 from .filters import provider_options
 from .fusion import fuse
 from .health import Health
@@ -29,7 +30,7 @@ class SmartRouter:
         self.generation = str(uuid4())
 
     async def search(self, request: SearchRequest, allowed: set[str], context=None):
-        task = analyze(request)
+        task = bounded_task(analyze(request))
         try:
             plan = self.planner.plan(task, allowed, request.fusion)
         except NoProviders as error:
@@ -40,6 +41,8 @@ class SmartRouter:
         def execution_call(entry):
             capability = self.registry.providers[entry.name]
             options = provider_options(capability.provider, task)
+            if capability.provider == "bensz_search":
+                options["fusion"] = request.fusion
             if request.search_domain_filter:
                 options["search_domain_filter"] = request.search_domain_filter
             if request.country:

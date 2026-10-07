@@ -2,6 +2,8 @@
 # Build context: project root; choose an immutable/local backup base when deploying.
 ARG BASE_IMAGE=huangwb8/bensz-search:latest
 FROM ${BASE_IMAGE}
-COPY --chown=appuser:appuser pyproject.toml uv.lock ./
+COPY --chown=appuser:appuser pyproject.toml ./
+COPY --chown=appuser:appuser .bensz-api/uv.lock ./.bensz-api/uv.lock
+COPY --chown=appuser:appuser scripts/uv.sh scripts/uv_lock.py ./scripts/
 COPY --chown=appuser:appuser src ./src
-RUN uv sync --frozen --no-dev --no-editable
+RUN rm -f uv.lock && sh scripts/uv.sh sync --frozen --no-dev --no-editable

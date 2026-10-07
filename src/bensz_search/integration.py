@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from litellm.integrations.custom_logger import CustomLogger
 from pydantic import ValidationError
 
+from .federation import FederationMiddleware
 from .models import SearchRequest
 from .openai_search import provider_call
 from .router import SearchFailed, SmartRouter
@@ -27,7 +28,7 @@ class SearchInputMiddleware:
     """Set the default tool before native auth, and bind smart requests to this ASGI task."""
 
     def __init__(self, app, default_tool="auto"):
-        self.app, self.default_tool = app, default_tool
+        self.app, self.default_tool = FederationMiddleware(app), default_tool
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -153,7 +154,7 @@ class SearchInputMiddleware:
             data = json.loads(body)
             if not isinstance(data, dict):
                 raise ValueError("search body must be an object")
-            if any(
+            if any(key.startswith("_federation_") for key in data) or any(
                 key in data
                 for key in (
                     "api_key",

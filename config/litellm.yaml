@@ -1,5 +1,11 @@
 model_list: []
 search_tools:
+  - search_tool_name: bensz_search
+    litellm_params:
+      search_provider: bensz_search
+      api_key: os.environ/BENSZ_SEARCH_UPSTREAM_KEY
+      api_base: os.environ/BENSZ_SEARCH_UPSTREAM_URL
+      timeout: 15
   - search_tool_name: openai
     litellm_params:
       search_provider: openai

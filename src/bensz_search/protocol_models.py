@@ -165,6 +165,19 @@ class Source(StrictModel):
     independence_basis: str = "configured source family; independence not measured"
     snippet_kind: str
     date: str | None = None
+    instance_path: list[str] = Field(default_factory=list, max_length=8)
+    upstream_tool_id: str | None = Field(default=None, max_length=64)
+    upstream_call_id: str | None = Field(default=None, max_length=64)
+    upstream_rank: int | None = Field(default=None, ge=1)
+
+    @field_validator("instance_path")
+    @classmethod
+    def valid_instance_path(cls, value):
+        from .federation import valid_id
+
+        if any(not valid_id(node) for node in value):
+            raise ValueError("Invalid provenance instance ID")
+        return value
 
 
 class ProtocolResult(StrictModel):

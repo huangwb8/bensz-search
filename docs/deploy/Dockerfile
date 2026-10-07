@@ -5,9 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     LITELLM_TELEMETRY=False
 WORKDIR /app
 RUN pip install --no-cache-dir uv==0.11.14
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml ./
+COPY .bensz-api/uv.lock ./.bensz-api/uv.lock
+COPY scripts/uv.sh scripts/uv_lock.py ./scripts/
 COPY src ./src
-RUN uv sync --frozen --no-dev --no-editable
+RUN sh scripts/uv.sh sync --frozen --no-dev --no-editable
 COPY config ./config
 COPY demo ./demo
 RUN useradd --uid 10001 --create-home appuser && mkdir /app/data && chown -R appuser:appuser /app

@@ -1,4 +1,4 @@
-# 添加搜索 API：OpenAI、Exa、Brave、Tavily、Serper、Perplexity 与 SearXNG
+# 添加搜索 API 与远端 bensz-search
 
 本教程面向 bensz-search 管理员，按“获取供应商密钥 → 后台添加 → 单独测试 → 应用调用”的顺序操作。依据当前项目源码及 **LiteLLM 1.103.2** 编写，本地后台默认地址为 <http://127.0.0.1:8898/admin>；自定义部署请替换地址和端口。
 
@@ -25,7 +25,7 @@
 | 服务名称 | 自己取的唯一名称，例如 `exa-main`；1–64 个字母、数字、短横线或下划线，不能使用保留名 `auto`。保存后名称不能修改 |
 | 服务类型 | 选择对应供应商，例如 Exa；不能只填 Key 而不确认类型 |
 | API 服务地址 | 商业服务通常**留空**即可使用原生默认地址；手动填写时使用下面的地址速查表 |
-| API Key | 粘贴该供应商控制台生成的密钥；六种商业服务均必填 |
+| API Key | 粘贴该供应商控制台生成的密钥；商业服务必填；bensz-search 使用远端访问密钥 |
 | 搜索引擎（可选） | 仅 SearXNG 使用，其他服务留空 |
 | 超时时间（ms） | 可先填 `15000`，即 15 秒；允许范围为 `100`–`60000` |
 | 启用服务，参与搜索路由 | 勾选后可供搜索调试台、外部 API 和自动路由使用；也可先不勾选，保存后单独测试，再点击“启用” |
@@ -44,9 +44,14 @@
 | Tavily | `tavily-main` | `https://api.tavily.com` | `TAVILY_API_KEY` |
 | Serper | `serper-main` | `https://google.serper.dev` | `SERPER_API_KEY` |
 | Perplexity | `perplexity-main` | `https://api.perplexity.ai` | `PERPLEXITY_API_KEY` |
+| bensz-search | `academic-remote` | **必填**远端根地址，例如 `https://search.example.org` | `BENSZ_SEARCH_UPSTREAM_URL`、`BENSZ_SEARCH_UPSTREAM_KEY` |
 | SearXNG | `searxng-local` | **必填**实例地址，例如 `http://host.docker.internal:8080` | `SEARXNG_API_BASE`、`SEARXNG_ENGINES` |
 
 **Brave 的地址格式需要特别注意**：当前 adapter 直接使用完整 endpoint，手动填写时必须保留 `/res/v1/web/search`。Exa、Tavily、Serper、Perplexity 的 adapter 会补上 `/search`，填写表中的根地址即可。
+
+## bensz-search：接入其他实例
+
+在服务类型中选择 **bensz-search**，填写远端根地址和远端“访问密钥”页面生成的 Key，搜索引擎留空，建议超时 `15000` ms。远端继续执行自己的自动路由，也可接入其他实例。参与节点均需升级到支持联邦搜索的版本；默认最多 4 层，提供循环检测、全链调用额度、超时传递与来源去重。详见[实例组合与递归搜索](smart-search-router/federated-search.md)。
 
 ## OpenAI：使用 Responses 内置网页搜索
 

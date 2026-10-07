@@ -43,6 +43,8 @@ Python 与 TypeScript 均提供消息族实现；生成 schema 来自同一源�
 
 ## 搜索与 MCP
 
+- 2026-10-07 新增原生 `bensz_search` 聚合实例搜索源；多实例 HTTP 与后台/原生/v1 契约通过，底层供应商为模拟。v1 Source 新增可选来源路径与叶子字段；采用严格旧响应 Schema 的客户端需同步新 Schema。远端部分成功在当前层 execution 中保留。真实部署链路尚未验证，见[配置与边界](../federated-search.md)。
+
 - SearXNG：实例 `/config` 元信息与真实关键词搜索分别验收；不宣称完整 PubMed 布尔/字段语法、跨地区表现或全部引擎可用。
 - HTTP/MCP：本机隔离 Docker、真实应用 Key 和标准 SDK 的工具发现/调用可验证真实搜索；模型仍未配置，因此不标成 MCP 宿主真实模型闭环。
 - Exa、Brave、Tavily、Serper、Perplexity、OpenAI 搜索源：保持现有 adapter 与回归；本次无新真实凭据，不增加供应商成功率承诺。

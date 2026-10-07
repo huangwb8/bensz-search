@@ -7,7 +7,7 @@
 
 基于 LiteLLM 1.103.2 的独立扩展，不修改 upstream 源码。管理员连接搜索源、测试服务并管理用户；成员在个人工作台搜索并创建应用访问密钥。自动搜索按任务和约束选择服务，处理超时、fallback、去重和 weighted RRF 融合。外部 AI 可先发现能力，再提交逐引擎查询计划。
 
-当前发布 `v1.0.3`；官方镜像为 [`huangwb8/bensz-search:1.0.3`](https://hub.docker.com/r/huangwb8/bensz-search)，仅 `linux/amd64`，同时提供 `latest`。首次部署需要配置可用搜索源；商业服务需要自己的 API Key。
+当前发布 `v1.0.4`；官方镜像为 [`huangwb8/bensz-search:1.0.4`](https://hub.docker.com/r/huangwb8/bensz-search)，仅 `linux/amd64`，同时提供 `latest`。首次部署需要配置可用搜索源；商业服务需要自己的 API Key。
 
 ## 快速开始
 
@@ -32,7 +32,9 @@ curl --noproxy '*' http://127.0.0.1:8898/ready
 
 管理员侧栏上下排列“管理员 / 用户”两个独立折叠区；成员只看到用户区。页面支持刷新与浏览器前进后退，右上角显示运行版本，移动端保持可用。角色和密钥归属由服务端校验。
 
-支持 **OpenAI Web Search、Exa、Brave、Tavily、Serper、Perplexity、SearXNG**，可配置多个同类服务。保存后即时影响新请求；编辑时 API Key 留空保留同类型密钥，换类型不继承旧密钥。数据库仅首次导入环境配置，此后以后台设置为准。见[搜索 API 教程](docs/search-api-setup.md)。
+`v1.0.4` 新增 **bensz-search 实例递归组合**，支持循环检测、调用额度、超时与底层来源去重；见[接入说明](docs/smart-search-router/federated-search.md)。参与组合的实例需升级到支持联邦搜索的版本。
+
+支持 **OpenAI Web Search、Exa、Brave、Tavily、Serper、Perplexity、SearXNG、bensz-search**，可配置多个同类服务。保存后即时影响新请求；编辑时 API Key 留空保留同类型密钥，换类型不继承旧密钥。数据库仅首次导入环境配置，此后以后台设置为准。见[搜索 API 教程](docs/search-api-setup.md)。
 
 OpenAI 使用 Responses `web_search`，默认 `gpt-4.1-mini`，结果标注生成摘要；见 [OpenAI 说明](docs/smart-search-router/openai-web-search.md)。SearXNG 默认列出 11 个常用引擎，需实例实际支持并启用；按任务选择子集，历史真实验收覆盖 GitHub/PubMed。见[引擎说明](docs/smart-search-router/searxng-default-engines.md)。
 
@@ -79,8 +81,8 @@ docker compose -f docs/deploy/compose.yaml ps
 服务器在 `/docker/bensz-search` 先备份旧镜像 ID、Compose 和私有配置，再仅更新搜索服务：
 
 ```bash
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.3 docker compose -f docker-compose.yml pull search
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.3 docker compose -f docker-compose.yml up -d --no-deps --wait search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.4 docker compose -f docker-compose.yml pull search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.4 docker compose -f docker-compose.yml up -d --no-deps --wait search
 ```
 
 容器非 root，限制内存、并发、PID 和日志。当前单机单进程，未验收多实例状态共享。不要用 `down -v` 日常重启。HTTPS 部署启用 Secure Cookie，并只信任实际代理 IP 的转发头。备份、恢复和代理设置见[本地部署](docs/deploy/README.md)和[服务器部署](docs/deploy/server-deployment.md)。
@@ -95,7 +97,7 @@ sh scripts/uv.sh run ruff format --check src tests demo scripts docs/deploy
 node --check src/bensz_search/static/app.js
 ```
 
-入口将 Python 环境、uv/pytest/Ruff 缓存固定在 `.bensz-api/`。版本唯一源为 `pyproject.toml`，依赖由 `uv.lock` 固定。60 条[路由 benchmark](tests/benchmarks/routing.json)允许多个合理 provider；测试覆盖 API、权限、融合、fallback、持久化及工作台入口。fixture 用法见[部署文档](docs/deploy/README.md)，不能以模拟结果代替真实供应商验收。
+入口将 Python 环境、uv/pytest/Ruff 缓存固定在 `.bensz-api/`，依赖锁文件为纳入 Git 的 [`.bensz-api/uv.lock`](.bensz-api/uv.lock)。uv 本身要求根目录锁文件，入口通过临时符号链接适配并在退出后清理；请使用上述命令，同一项目不可同时运行多个入口命令。入口需要 macOS/Linux 上的 `python3`。版本唯一源为 `pyproject.toml`。60 条[路由 benchmark](tests/benchmarks/routing.json)允许多个合理 provider；测试覆盖 API、权限、融合、fallback、持久化及工作台入口。fixture 用法见[部署文档](docs/deploy/README.md)，不能以模拟结果代替真实供应商验收。
 
 ## 文档与边界
 

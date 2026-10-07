@@ -1,5 +1,15 @@
 # Tunable priors, NOT measured provider quality. Estimated USD per request at <=20 results.
 providers:
+  bensz_search:
+    provider: bensz_search
+    # Unknown until result provenance arrives; separate nodes are not independent sources.
+    source_family: bensz_search_unknown
+    capabilities: {general: 0.80, news: 0.80, academic: 0.80, deep: 0.80, people: 0.65, coding: 0.80, semantic: 0.75, keyword: 0.80, freshness: 0.75, authority: 0.75}
+    features: [federated_search, citations, domain_filter]
+    cost_class: medium
+    latency_class: medium
+    estimated_cost_usd: 0.02
+    timeout_ms: 15000
   openai:
     provider: openai
     # Underlying sources are not guaranteed independent from other aggregators.

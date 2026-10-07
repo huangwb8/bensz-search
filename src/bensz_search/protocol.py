@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from .executor import ExecutionCall, execute
+from .federation import bounded_task
 from .intent import analyze
 from .models import SearchRequest
 from .planner import NoProviders
@@ -150,13 +151,15 @@ async def search(router, request, allowed, limits=None, context=None):
             "stale_capabilities", "Capabilities changed; discover and replan", "registry_revision", 409, True
         )
     warnings = []
-    task = analyze(
-        SearchRequest(
-            query=request.query or request.calls[0].query,
-            profile=request.profile,
-            constraints=request.constraints,
-            max_results=request.max_results,
-            fusion=request.fusion,
+    task = bounded_task(
+        analyze(
+            SearchRequest(
+                query=request.query or request.calls[0].query,
+                profile=request.profile,
+                constraints=request.constraints,
+                max_results=request.max_results,
+                fusion=request.fusion,
+            )
         )
     )
 
@@ -201,13 +204,16 @@ async def search(router, request, allowed, limits=None, context=None):
                 }
             )
         per_task = task.model_copy(update={"query": item.query})
+        options = map_options(p, item.options, per_task)
+        if p.provider == "bensz_search":
+            options["fusion"] = request.fusion
         return ExecutionCall(
             item.call_id,
             item.tool_id,
             item.query,
             item.max_results,
             engine_id=item.engine_id,
-            options=map_options(p, item.options, per_task),
+            options=options,
             domains=item.options.search_domain_filter,
             task=per_task,
         )
@@ -325,7 +331,7 @@ async def search(router, request, allowed, limits=None, context=None):
     )
     envelope.warnings.extend(result_warnings)
     envelope.estimated_cost_usd = cost
-    healthy = any(a["status"] in {"success", "empty"} for a in attempts)
+    healthy = any(a["status"] in {"success", "partial_success", "empty"} for a in attempts)
     failed = any(a["status"] not in {"success", "empty"} for a in attempts)
     envelope.status = (
         ("partial_success" if failed else "success")

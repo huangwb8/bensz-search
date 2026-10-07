@@ -1089,6 +1089,50 @@
               }
             ],
             "title": "Date"
+          },
+          "instance_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Instance Path"
+          },
+          "upstream_tool_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Tool Id"
+          },
+          "upstream_call_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Call Id"
+          },
+          "upstream_rank": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Rank"
           }
         },
         "additionalProperties": false,

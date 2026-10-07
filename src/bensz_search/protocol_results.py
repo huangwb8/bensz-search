@@ -45,18 +45,33 @@ def normalize_results(buckets, calls, registry, mode, count, snippet_limit):
     )
     enriched = []
     for row, item in zip(results, trace, strict=True):
-        sources = [
-            Source(
-                call_id=s["provider"],
-                tool_id=calls[s["provider"]].tool_id,
-                engine_id=calls[s["provider"]].engine_id,
-                rank=s["rank"],
-                source_family=registry.providers[calls[s["provider"]].tool_id].source_family,
-                snippet_kind=s["snippet_kind"],
-                date=s["date"],
-            )
-            for s in item["sources"]
-        ]
+        sources = []
+        for s in item["sources"]:
+            for leaf in s["upstream_sources"] or [{}]:
+                sources.append(
+                    Source(
+                        call_id=s["provider"],
+                        tool_id=calls[s["provider"]].tool_id,
+                        engine_id=calls[s["provider"]].engine_id,
+                        rank=s["rank"],
+                        source_family=leaf.get(
+                            "source_family", registry.providers[calls[s["provider"]].tool_id].source_family
+                        ),
+                        snippet_kind=leaf.get("snippet_kind", s["snippet_kind"]),
+                        date=leaf.get("date", s["date"]),
+                        **{
+                            k: leaf[k]
+                            for k in (
+                                "instance_path",
+                                "upstream_tool_id",
+                                "upstream_call_id",
+                                "upstream_rank",
+                            )
+                            if k in leaf
+                        },
+                    )
+                )
+        sources = sources[:30]
         identity = item["canonical_identity"]
         result_id = hashlib.sha256(identity.encode()).hexdigest()[:24]
         if len({s.date for s in sources if s.date}) > 1:

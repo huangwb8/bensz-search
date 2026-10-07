@@ -26,9 +26,13 @@ def contract(capability):
             "Do not infer verified field syntax from an engine name.",
             "Do not submit credentials, URLs, provider options or query arrays.",
         ],
-        "evidence": ADAPTER_EVIDENCE.format(provider=provider),
-        "last_verified": "2026-10-03",
-        "verification_scope": "adapter transformation; live query semantics not guaranteed",
+        "evidence": "Project federated_search.py; remote auto routing via bounded v1 HTTP protocol"
+        if provider == "bensz_search"
+        else ADAPTER_EVIDENCE.format(provider=provider),
+        "last_verified": "2026-10-07" if provider == "bensz_search" else "2026-10-03",
+        "verification_scope": "cooperating instances; remote capabilities and source independence not measured"
+        if provider == "bensz_search"
+        else "adapter transformation; live query semantics not guaranteed",
     }
 
 

@@ -9,10 +9,14 @@ from uuid import uuid4
 import httpx
 from litellm.llms.base_llm.search.transformation import SearchResponse
 
+from .federation import FederationError
+from .federation import context as federation_context
 from .filters import filter_results
 
 
 def failure_category(error):
+    if isinstance(error, FederationError):
+        return error.category
     status = getattr(error, "status_code", None)
     if status in {401, 403}:
         return "auth"
@@ -67,7 +71,9 @@ async def execute(
     fallback_on_empty=True,
     empty_is_failure=False,
 ):
-    deadline = time.monotonic() + timeout_ms / 1000
+    federation = federation_context()
+    deadline = min(time.monotonic() + timeout_ms / 1000, federation.deadline)
+    max_cost = min(max_cost, federation.cost_budget_usd)
     semaphore = asyncio.Semaphore(concurrency)
     claimed, buckets, attempts = set(), {}, []
     reserved = 0.0
@@ -80,6 +86,23 @@ async def execute(
     }
     # A fast failing branch cannot spend an unstarted primary's cost reservation.
     waiting = {c.call_id: costs[c.call_id] for c in calls}
+    candidates = {c.call_id: c for c in [*calls, *(f for p in calls for f in p.fallbacks)]}
+    # Reserve disjoint subtrees before scheduling. Unused remote slots are not recycled.
+    allocations = {}
+    spare = federation.remaining_calls
+    for name, item in candidates.items():
+        queries = len(item.query) if isinstance(item.query, list) else 1
+        minimum = queries * (2 if router.registry.providers[item.tool_id].provider == "bensz_search" else 1)
+        if minimum <= spare:
+            allocations[name] = minimum
+            spare -= minimum
+    delegates = [
+        name
+        for name in allocations
+        if router.registry.providers[candidates[name].tool_id].provider == "bensz_search"
+    ]
+    for index, name in enumerate(delegates):
+        allocations[name] += spare // len(delegates) + (index < spare % len(delegates))
     base = {k: v for k, v in (context or {}).items() if k in {"metadata", "litellm_metadata", "user"}}
 
     async def branch(primary):
@@ -107,6 +130,10 @@ async def execute(
                 claimed.add(item.call_id)
                 attempts.append(attempt)
                 waiting.pop(primary.call_id, None)
+                allocation = allocations.get(item.call_id, 0)
+                if allocation < 1 or (capability.provider == "bensz_search" and allocation < 2):
+                    attempt["error_code"] = "call_budget_exceeded"
+                    continue
                 if remaining <= 0:
                     attempt["error_code"] = "timeout"
                     continue
@@ -148,12 +175,26 @@ async def execute(
                     )
                     if item.engine_id:
                         kwargs["engines"] = item.engine_id
+                    if capability.provider == "bensz_search":
+                        kwargs.update(
+                            _federation_call_budget=allocation - 1,
+                            _federation_cost_budget=cost,
+                            _federation_task=item.task,
+                            search_domain_filter=item.domains,
+                        )
                     raw = await asyncio.wait_for(router.call(**kwargs), kwargs["timeout"])
                     response = raw if isinstance(raw, SearchResponse) else SearchResponse.model_validate(raw)
                     for rank, row in enumerate(response.results, 1):
                         row.original_rank = rank
                     rows = filter_results(response.results, item.task, item.domains)[: item.count]
-                    attempt.update(result_count=len(rows), status="success" if rows else "empty")
+                    attempt.update(
+                        result_count=len(rows),
+                        status=(
+                            "partial_success" if getattr(response, "federation_partial", False) else "success"
+                        )
+                        if rows
+                        else "empty",
+                    )
                     if rows:
                         buckets[item.call_id] = rows
                     latency = round((time.monotonic() - started) * 1000, 2)
@@ -178,13 +219,14 @@ async def execute(
                     router.health.release(item.tool_id)
 
     pending = [asyncio.create_task(branch(c)) for c in calls]
+    group = asyncio.gather(*pending)
     try:
-        await asyncio.wait_for(asyncio.gather(*pending), max(0.001, deadline - time.monotonic()))
+        await asyncio.wait_for(group, max(0.001, deadline - time.monotonic()))
     except TimeoutError:
         pass
     finally:
         for job in pending:
             if not job.done():
                 job.cancel()
-        await asyncio.gather(*pending, return_exceptions=True)
+        await asyncio.gather(group, *pending, return_exceptions=True)
     return buckets, attempts, round(reserved, 8)

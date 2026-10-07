@@ -1,5 +1,7 @@
 .venv/
-.bensz-api/
+.bensz-api/*
+!.bensz-api/uv.lock
+/uv.lock
 /Prompts.md
 __pycache__/
 .pytest_cache/

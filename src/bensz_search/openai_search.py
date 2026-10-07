@@ -154,6 +154,16 @@ def provider_call(router, original):
             tool for tool in getattr(router, "search_tools", []) if tool.get("search_tool_name") == name
         ]
         if matching and any(
+            tool.get("litellm_params", {}).get("search_provider") == "bensz_search" for tool in matching
+        ):
+            from .federated_search import search as federated_search
+
+            if any(
+                tool.get("litellm_params", {}).get("search_provider") != "bensz_search" for tool in matching
+            ):
+                raise ValueError("bensz-search aliases cannot mix provider types")
+            return await federated_search(random.choice(matching)["litellm_params"], kwargs)
+        if matching and any(
             tool.get("litellm_params", {}).get("search_provider") == "openai" for tool in matching
         ):
             if any(tool.get("litellm_params", {}).get("search_provider") != "openai" for tool in matching):
