@@ -60,3 +60,31 @@ class Health:
 
     def release(self, name):
         self.state(name).probing = False
+
+    def snapshot(self, name, enabled=True):
+        state = self.states.get(name, State())
+        remaining = max(0, state.open_until - self.clock())
+        status = (
+            "disabled"
+            if not enabled
+            else "half_open"
+            if state.probing
+            else "open"
+            if remaining
+            else "unknown"
+            if state.observed_at is None
+            else "degraded"
+            if state.failures
+            else "healthy"
+        )
+        return {
+            "name": name,
+            "state": status,
+            "scope": "process",
+            "cooldown_remaining_s": round(remaining, 1),
+            "failures": state.failures,
+            "last_error": None if state.observed_result in {"unknown", "success"} else state.observed_result,
+            "observed_at": state.observed_at,
+            "success_rate": state.success_rate,
+            "latency_ms": state.latency_ms,
+        }

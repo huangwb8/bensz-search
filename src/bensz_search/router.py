@@ -1,5 +1,6 @@
 """Execution owns one deadline, one attempt per tool and one estimated cost reservation."""
 
+import time
 from uuid import uuid4
 
 from litellm.llms.base_llm.search.transformation import SearchResponse
@@ -30,6 +31,7 @@ class SmartRouter:
         self.generation = str(uuid4())
 
     async def search(self, request: SearchRequest, allowed: set[str], context=None):
+        started = time.monotonic()
         task = bounded_task(analyze(request))
         try:
             plan = self.planner.plan(task, allowed, request.fusion)
@@ -79,7 +81,14 @@ class SmartRouter:
             request.max_results,
         )
         event = self.telemetry.record(
-            request_id, task, plan, attempts, ordered, round(reserved_cost, 8), trace
+            request_id,
+            task,
+            plan,
+            attempts,
+            ordered,
+            round(reserved_cost, 8),
+            trace,
+            round((time.monotonic() - started) * 1000, 2),
         )
         if not results:
             raise SearchFailed()

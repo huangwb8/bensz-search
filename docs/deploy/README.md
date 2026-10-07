@@ -27,7 +27,7 @@ Dockerfile、Compose 配置、部署脚本和环境变量示例统一位于本�
 
 ## 配置与运行
 
-Search API 页面支持六类原生 adapter 和 OpenAI Web Search 项目适配器，多条同类型配置。保存、启停和删除会建立新的 Router/Registry，下一次请求立即使用新配置，不需要手动重启。旧请求允许完成；配置更新重置熔断状态。连接测试可以测试尚未启用的服务，但不会把它加入自动路由。
+Search API 页面支持六类 LiteLLM 原生 adapter、OpenAI Web Search 和 bensz-search 实例适配器，多条同类型配置。保存、启停和删除会建立新的 Router/Registry，下一次请求立即使用新配置，不需要手动重启。旧请求允许完成；配置更新重置熔断状态。连接测试可以测试尚未启用的服务，但不会把它加入自动路由。
 
 各供应商的密钥获取入口、服务地址填写值和测试步骤见[搜索 API 添加教程](../search-api-setup.md)。
 
@@ -39,13 +39,15 @@ OpenAI 可直接在后台添加，填写 Key、支持 `web_search` 的模型和 
 
 ## 身份与 API 调用
 
-管理员可增删后台用户，成员不能修改 provider/用户。登录为 12 小时 session，注销或改密后撤销会话；改密不自动撤销独立应用 key，需在访问密钥页面撤销。删除用户级联删除其会话和 key。
+管理员可创建、编辑角色、重置密码、停用和删除用户；禁止删除、停用或降级最后一个启用的管理员。成员不能修改 provider/用户。登录为 12 小时 session，可查看登录会话和退出其他设备；注销或改密后撤销会话；改密不自动撤销独立应用 key，需在用户区“我的密钥”或管理员区“全体访问密钥”撤销。删除用户级联删除其会话和 key。
 
-后台生成的 key 可调用原生搜索 POST、v1 能力发现与搜索以及 MCP 入口，默认允许当前全部启用服务；不开放原生 LiteLLM 管理路由，不提供按用户账单或原生 virtual-key DB 管理。应用应使用专属 key 而非 master key。完整 key 仅在生成时展示，列表仅保存哈希/前缀，撤销立即生效。
+后台生成的 key 可调用原生搜索 POST、v1 能力发现与搜索以及 MCP 入口，默认允许当前全部启用服务；不开放原生 LiteLLM 管理路由，不提供按用户账单或原生 virtual-key DB 管理。应用应使用专属 key 而非 master key。完整 key 仅在生成时展示，数据库保存哈希与前缀；撤销、过期或停用用户立即拒绝新请求。可选择 `search`（原生搜索与工具发现）/`protocol`（协议与 MCP）范围；管理员可查看和撤销全体密钥。
 
 Cookie 为 HttpOnly/SameSite Strict；写接口检查 CSRF 与 Origin。当前纯本机 HTTP 设置 `BENSZ_SEARCH_COOKIE_SECURE=false`，将来部署 HTTPS 时设置 true。登录限速、运行指标和熔断均为单进程，当前部署不启用多 worker。
 
 ## 持久化、备份和恢复
+
+1.0.5 启动时自动执行幂等增量迁移，保留旧用户、会话、应用 key 和凭据；新增审计记录、密钥调用次数与 365 天保留期的每日用量汇总。统计按 UTC 日、服务与状态聚合，不保存查询明文。进程内健康与最近记录仍不持久化。升级前应备份 SQLite 与匹配加密密钥；旧版本有按列数插入的语句，回退旧镜像必须恢复升级前数据库快照，不能直接复用迁移后的库。
 
 数据库位于容器 `/app/data/admin.sqlite3`，Docker named volume 为 `bensz-search_search-data`。加密检查会在密钥不匹配时拒绝启动，避免静默丢失凭据。
 
@@ -67,7 +69,7 @@ docker compose -f docs/deploy/compose.yaml start search
 
 ## 版本与验证边界
 
-版本唯一维护于 `pyproject.toml`，镜像标签对应 1.0.4。依赖由纳入版本控制的 `.bensz-api/uv.lock` 固定，upstream 未修改。Docker 构建上下文只放行该锁文件，继续排除 `.bensz-api/` 内的环境、缓存及任务材料；两个 Dockerfile 均通过 `scripts/uv.sh` 安装依赖。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
+版本 1.0.5 唯一维护于 `pyproject.toml`；Docker Hub 镜像仅提供 `linux/amd64` 的 `1.0.5` 与 `latest`，本地源码构建标签为 1.0.5。镜像与服务器验收见 [v1.0.5 发布记录](releases/v1.0.5.md)。依赖由纳入版本控制的 `.bensz-api/uv.lock` 固定，upstream 未修改。Docker 构建上下文只放行该锁文件，继续排除 `.bensz-api/` 内的环境、缓存及任务材料；两个 Dockerfile 均通过 `scripts/uv.sh` 安装依赖。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
 
 `/health/liveliness` 是进程检查；`/ready` 是配置检查；后台“测试”才验证外部检索。当前已通过的本机验收见 [production-verification.md](../smart-search-router/production-verification.md)。商业源无凭据时只验证配置链路，公网 TLS、多节点和原生 LiteLLM DB 模式未验收。
 

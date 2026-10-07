@@ -7,6 +7,7 @@ from contextvars import ContextVar
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
+from litellm.proxy._types import ProxyException
 from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
 from mcp import types
 from mcp.server import Server
@@ -54,7 +55,7 @@ def create_manager():
             )
         except ProtocolFailure as error:
             data = error.envelope().model_dump()
-        except HTTPException:
+        except (HTTPException, ProxyException):
             data = (
                 ProtocolFailure("permission_denied", "Search authorization rejected", status_code=403)
                 .envelope()
@@ -113,7 +114,9 @@ class MCPTransport:
             user = await authenticate(request)
             await permission_snapshot(request, user)
         except Exception as error:
-            status = getattr(error, "status_code", 401)
+            status = int(getattr(error, "status_code", None) or getattr(error, "code", 401))
+            if status not in {401, 403, 429, 503}:
+                status = 401
             return await JSONResponse({"error": "Unauthorized search transport"}, status_code=status)(
                 scope, receive, send
             )

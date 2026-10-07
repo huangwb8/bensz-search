@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from litellm.proxy import proxy_server as proxy
 from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
+from starlette.routing import Route
 
 from .admin import initialize_admin, managed_api_auth
 from .admin import router as admin_router
@@ -126,6 +127,9 @@ async def lifespan(application):
                 proxy.llm_router.asearch = original
                 litellm.callbacks.remove(callback)
                 proxy.user_custom_auth = old_auth
+                lease = getattr(proxy.llm_router, "_bensz_lease", None)
+                if lease:
+                    lease.retire()
                 if runtime:
                     runtime.store.close()
                 application.state.admin_runtime = None
@@ -144,6 +148,20 @@ static_path = Path(__file__).parent / "static"
 app.include_router(admin_router)
 app.include_router(protocol_router)
 app.mount("/bensz-search/mcp", MCPTransport(), name="bensz-search-mcp")
+# Upstream's generic MCP route can capture the slashless facade. Give both
+# facade forms priority and let our transport enforce the same key scopes.
+mcp_mount = next(r for r in app.router.routes if getattr(r, "name", "") == "bensz-search-mcp")
+app.router.routes.remove(mcp_mount)
+app.router.routes.insert(0, mcp_mount)
+app.router.routes.insert(
+    0,
+    Route(
+        "/bensz-search/mcp",
+        MCPTransport(),
+        methods=["GET", "POST", "DELETE"],
+        name="bensz-search-mcp-exact",
+    ),
+)
 if static_path.exists():
     app.mount("/admin/static", StaticFiles(directory=static_path), name="admin-static")
 
@@ -199,6 +217,15 @@ async def console():
     return FileResponse(static_path / "index.html", headers={"Cache-Control": "no-store"})
 
 
+@app.get("/admin/changelog", include_in_schema=False)
+async def console_changelog():
+    return FileResponse(
+        static_path / "release-notes.md",
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/api/docs", include_in_schema=False)
 async def api_docs():
     return get_swagger_ui_html(openapi_url=app.openapi_url, title="bensz-search API")
@@ -229,6 +256,33 @@ async def invalid_request(request: Request, error: RequestValidationError):
         field = ".".join(str(x) for x in error.errors()[0]["loc"])
         return JSONResponse(
             ProtocolFailure("invalid_plan", "Invalid search request", field).envelope().model_dump(),
+            status_code=422,
+        )
+    if request.url.path.startswith("/admin/api/"):
+        messages = {
+            "missing": "请填写此项",
+            "string_too_short": "内容长度不足",
+            "string_too_long": "内容超过允许长度",
+            "string_pattern_mismatch": "格式不正确",
+            "literal_error": "请选择有效选项",
+            "extra_forbidden": "此字段不受支持",
+            "greater_than_equal": "数值低于允许范围",
+            "less_than_equal": "数值超过允许范围",
+            "finite_number": "请输入有限数值",
+            "value_error": "内容无效，请检查格式和配置要求",
+        }
+        return JSONResponse(
+            {
+                "detail": "请检查标记的字段",
+                "errors": [
+                    {
+                        "field": ".".join(str(p) for p in e["loc"][1:]),
+                        "message": messages.get(e["type"], "输入格式或取值不正确"),
+                        "code": e["type"],
+                    }
+                    for e in error.errors()
+                ],
+            },
             status_code=422,
         )
     return JSONResponse(

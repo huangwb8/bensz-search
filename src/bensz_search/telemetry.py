@@ -2,12 +2,17 @@
 
 import json
 import logging
+import threading
 from collections import Counter, deque
+from contextvars import ContextVar
+from datetime import UTC, datetime
 from itertools import combinations
 
 from .fusion import canonical_url
+from .usage import SUCCESS, add, aggregate, summary
 
 logger = logging.getLogger("bensz_search")
+usage_key = ContextVar("bensz_search_usage_key", default=None)
 
 
 class Telemetry:
@@ -15,8 +20,24 @@ class Telemetry:
         self.history = deque(maxlen=history_size)
         self.counts = Counter()
         self.feedback_counts = Counter()
+        self.lock = threading.RLock()
+        self.started_at = datetime.now(UTC).isoformat()
+        self.total = aggregate()
+        self.providers = {}
+        self.days = {}
+        self.sink = None
 
-    def record(self, request_id, task, plan, attempts, buckets, estimated_cost, fusion_trace):
+    def record(
+        self, request_id, task, plan, attempts, buckets, estimated_cost, fusion_trace, latency_ms=None
+    ):
+        with self.lock:
+            return self._record(
+                request_id, task, plan, attempts, buckets, estimated_cost, fusion_trace, latency_ms
+            )
+
+    def _record(
+        self, request_id, task, plan, attempts, buckets, estimated_cost, fusion_trace, latency_ms=None
+    ):
         marginal, seen = {}, set()
         urls = {name: {canonical_url(r.url) for r in rows} for name, rows in buckets.items()}
         for name, keys in urls.items():
@@ -55,20 +76,91 @@ class Telemetry:
             "marginal_gain": marginal,
             "overlap": overlap,
         }
-        self.history.append(event)
+        return self._append(event, latency_ms)
+
+    def record_execution(self, request_id, intent, attempts, result_count, cost, latency_ms, reasons=None):
+        # Deliberately project only safe execution metadata, never external query/call IDs.
+        event = {
+            "request_id": request_id,
+            "intent": intent,
+            "providers": list(dict.fromkeys(a["provider"] for a in attempts)),
+            "routing_reason": reasons or [],
+            "attempts": attempts,
+            "result_count": result_count,
+            "estimated_cost_usd": cost,
+            "fusion_contribution": {"providers": {}, "families": {}},
+            "marginal_gain": {},
+            "overlap": {},
+        }
+        with self.lock:
+            self.counts["requests"] += 1
+            self.counts["fallbacks"] += sum(bool(a.get("fallback")) for a in attempts)
+            for a in attempts:
+                self.counts[f"{intent}:{a['provider']}:{a['status']}"] += 1
+            return self._append(event, latency_ms)
+
+    def _append(self, event, latency_ms=None):
+        event["timestamp"] = datetime.now(UTC).isoformat()
+        event["latency_ms"] = (
+            latency_ms
+            if latency_ms is not None
+            else max(
+                (a["latency_ms"] for a in event["attempts"]),
+                default=0,
+            )
+        )
+        status = "success" if event["result_count"] else "failed"
+        if status == "success" and any(a["status"] not in SUCCESS for a in event["attempts"]):
+            status = "partial_success"
+        event["status"] = status
+        with self.lock:
+            self.history.append(event)
+            for target in (self.total, self.days.setdefault(event["timestamp"][:10], aggregate())):
+                add(
+                    target,
+                    status,
+                    event["latency_ms"],
+                    event["estimated_cost_usd"],
+                    sum(bool(a.get("fallback")) for a in event["attempts"]),
+                )
+            # Keep the process trend bounded, independent of uptime.
+            for day in sorted(self.days)[:-30]:
+                del self.days[day]
+            for a in event["attempts"]:
+                if a["status"] != "skipped":
+                    add(
+                        self.providers.setdefault(a["provider"], aggregate()),
+                        a["status"],
+                        a["latency_ms"],
+                        a.get("estimated_cost_usd", 0),
+                        int(bool(a.get("fallback"))),
+                    )
+            if self.sink:
+                try:
+                    self.sink(event)
+                except Exception:
+                    self.counts["persistence_errors"] += 1
+                    logger.error("Search usage persistence failed; process metrics remain available")
         logger.info("smart_search %s", json.dumps(event, ensure_ascii=False))
         return event
 
     def feedback(self, feedback):
-        if not any(event["request_id"] == feedback.request_id for event in self.history):
-            raise KeyError("request_id is not in the process-local recent history")
-        self.feedback_counts[feedback.event] += 1
+        with self.lock:
+            if not any(event["request_id"] == feedback.request_id for event in self.history):
+                raise KeyError("request_id is not in the process-local recent history")
+            self.feedback_counts[feedback.event] += 1
 
     def snapshot(self):
-        return {
-            "scope": "process",
-            "persistent": False,
-            "counters": dict(self.counts),
-            "feedback": dict(self.feedback_counts),
-            "recent": list(self.history),
-        }
+        with self.lock:
+            return {
+                "scope": "process",
+                "persistent": False,
+                "started_at": self.started_at,
+                "window_basis": "current process lifetime; trend limited to 30 UTC days",
+                "counters": dict(self.counts),
+                "feedback": dict(self.feedback_counts),
+                "recent": list(self.history),
+                "summary": summary(self.total),
+                "by_provider": [{"name": n, **summary(d)} for n, d in sorted(self.providers.items())],
+                "trend": [{"day": day, **summary(data)} for day, data in sorted(self.days.items())],
+            }

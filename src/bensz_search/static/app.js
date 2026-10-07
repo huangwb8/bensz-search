@@ -1,301 +1,518 @@
-'use strict';
-
-(() => {
-  const app = document.getElementById('app');
-  const dialog = document.getElementById('dialog');
-  dialog.addEventListener('close', () => { dialog.innerHTML = ''; });
-  const state = { user: null, csrf: '', page: 'overview', area: null, providers: [], catalog: [], overview: null, revision: 0, navExpanded: { admin: true, user: true }, menuOpen: false };
-  const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-  const fmt = value => new Intl.NumberFormat('zh-CN').format(value || 0);
-  const date = value => value ? new Date(typeof value === 'number' ? value * 1000 : value).toLocaleString('zh-CN', { hour12: false }) : '尚未使用';
-  const admin = () => state.user?.role === 'admin';
-  const userArea = () => /^\/app(?:\/|$)/.test(location.pathname);
-  const adminArea = () => admin() && !userArea();
-  const currentArea = () => adminArea() ? 'admin' : 'user';
-  const icon = name => {
-    const paths = { overview: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>', providers: '<path d="M7 8V3m10 5V3M5 8h14v3a7 7 0 0 1-14 0zm7 10v3"/>', search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>', keys: '<circle cx="8" cy="8" r="5"/><path d="m12 12 9 9m-4-4 3-3m-6 0 3-3"/>', users: '<circle cx="9" cy="7" r="4"/><path d="M2 21v-3a7 7 0 0 1 14 0v3m1-18a4 4 0 0 1 0 8m3 10v-3a7 7 0 0 0-3-6"/>', settings: '<circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/>', integration: '<path d="m8 5-7 7 7 7m8-14 7 7-7 7m-3-17-2 20"/>' };
-    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">${paths[name] || paths.overview}</svg>`;
-  };
-  const brand = () => '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="M25 7H12a5 5 0 0 0 0 10h8a4 4 0 0 1 0 8H7" stroke="currentColor" stroke-width="5" stroke-linecap="square"/><circle cx="25" cy="25" r="3" fill="currentColor"/></svg></span><span class="brand-copy">bensz-search</span>';
-  const pages = { overview: ['运行概览', 'OVERVIEW', '从服务配置到真实搜索，在这里管理你的搜索基础设施。'], providers: ['Search API', 'PROVIDERS', '连接不同搜索服务，统一路由、超时与访问配置。'], search: ['搜索调试台', 'PLAYGROUND', '发送真实查询，检查搜索结果与路由执行情况。'], keys: ['访问密钥', 'API KEYS', '为应用与 AI Agent 创建独立的访问密钥。'], users: ['用户管理', 'TEAM', '管理后台账号，以及管理员和成员的访问权限。'], settings: ['个人设置', 'ACCOUNT', '管理你的登录账号与密码。'], integration: ['接入指南', 'INTEGRATION', '通过一个兼容的 Search API，为你的应用接入智能搜索。'] };
-  const userPages = {
-    overview: ['我的工作台', 'MY WORKSPACE', '开始搜索，管理自己的访问密钥，将搜索能力接入你的应用。'],
-    search: ['搜索', 'SEARCH', '使用可用的搜索来源，找到需要的信息并查看来源。'],
-    keys: ['我的密钥', 'MY API KEYS', '管理属于你的访问密钥，为不同应用创建独立入口。'],
-    integration: pages.integration,
-    settings: ['账号设置', 'MY ACCOUNT', '管理你的登录账号与密码。'],
-  };
-  const pageInfo = (page, area = currentArea()) => { const table = area === 'admin' ? pages : userPages; return Object.prototype.hasOwnProperty.call(table, page) ? table[page] : null; };
-  const workspaceName = () => adminArea() ? '管理员后台' : '用户工作台';
-  function workspacePage() { return pageInfo(location.hash.slice(1)) ? location.hash.slice(1) : 'overview'; }
-  function enterWorkspace() {
-    if (!admin() && !userArea()) history.replaceState(null, '', `/app/${location.search}${location.hash}`);
-    shell();
-    return navigate(workspacePage(), { replace: true });
+import { t } from "./i18n.js";
+import { html, fmt, label, button, empty, formError, field, timeline } from './ui.js';
+import { adminPages, userPages, pageInfo, shell, loginView, head, views, providerTable, keyTable, userTable, searchResults, sessionPanel } from './views.js';
+import { providerForm, updateProviderFields, providerPayload, testForm, testResults, keyForm, userForm, importForm, reauthForm } from './forms.js';
+const app = document.getElementById('app');
+const dialog = document.getElementById('dialog');
+const state = { user: null, csrf: '', expiresAt: null, expiryWarned: false, area: 'user', page: 'overview', providers: [], catalog: [], overview: null, data: {},
+  revision: 0, authGeneration: 0, loadRevision: 0, currentURL: '', filters: {}, window: 'process', searchDraft: {}, searchResult: null, tests: {}, auditFilters: {}, auditOffset: 0,
+  theme: localStorage.getItem('bensz-search-theme') || 'system', menuOpen: false, dialogDirty: false, dirtyForms: new Set(), secret: null, editor: null };
+let opener = null;
+let reauthPending = null;
+const get = selector => document.querySelector(selector);
+const setContent = (node, value) => { if (node) node.innerHTML = String(value); };
+const busy = (button, value) => { if (button) { button.disabled = value; button.setAttribute('aria-busy', String(value)); } };
+function applyTheme() {
+  document.documentElement.dataset.theme = state.theme;
+}
+applyTheme();
+function notify(message, error = false) {
+  const container = document.getElementById('notice');
+  const node = document.createElement('div');
+  node.className = `toast${error ? ' error' : ''}`;
+  node.setAttribute('role', error ? 'alert' : 'status');
+  setContent(node, html`<span>${message}</span>${button(t("common.close"), 'notice-close', '', 'ghost')}`);
+  container.append(node);
+  if (!error) setTimeout(() => node.remove(), 6000);
+  while (container.childElementCount > 5) container.firstElementChild.remove();
+}
+const errorMessages = {
+  'Invalid credentials': t("copy.13fe36e577"), 'Invalid username or password': t("copy.13fe36e577"), 'Invalid current password': t("copy.f72ecf5321"),
+  'Administrator required': t("copy.b8dbd20cee"), 'Invalid CSRF token': t("copy.56916f26f3"),
+  'Cannot delete current user': t("copy.5d0f7f9974"), 'User already exists': t("copy.483d1c8d9f"),
+  'Provider already exists': t("copy.59628b9f4c"), 'auto is reserved': t("copy.39036c1aa5"),
+};
+function friendlyError(data, status) {
+  const detail = typeof data.detail === 'string' ? data.detail : '';
+  if (errorMessages[detail]) return errorMessages[detail];
+  const category = detail.match(/^搜索失败[:：]\s*([a-z_]+)$/);
+  if (category) return t('error.searchFailure') + label(category[1]);
+  if (/[\u3400-\u9fff]/.test(detail)) return detail;
+  return ({ 400: t("copy.f055223322"), 401: t("copy.ac5a3fdfa3"), 403: t("copy.9381f7dcc2"),
+    404: t("copy.2638f6f1a5"), 409: t("copy.7b95c4a340"), 422: t("copy.47f3645414"),
+    429: t("copy.55b9f76375"), 502: t("copy.0499cdcbb4"), 503: t("copy.9b975432f8") })[status] || t("copy.8977b79aa8");
+}
+async function api(path, method = 'GET', payload, retry = true) {
+  const generation = state.authGeneration;
+  const headers = { Accept: 'application/json' };
+  if (payload !== undefined) headers['Content-Type'] = 'application/json';
+  if (method !== 'GET') headers['X-CSRF-Token'] = state.csrf;
+  let response;
+  try {
+    response = await fetch(`/admin/api${path}`, { method, credentials: 'same-origin', headers,
+      body: payload === undefined ? undefined : JSON.stringify(payload), signal: AbortSignal.timeout(75000) });
+  } catch (error) {
+    throw new Error(error.name === 'TimeoutError' ? t("copy.bb2fa53a1a") : t("copy.e7b068fd04"));
   }
-  let toastTimer;
-  let snippetSequence = 0;
-  function updateSnippetControls() {
-    document.querySelectorAll('[data-snippet-toggle]').forEach(button => {
-      const snippet = document.getElementById(button.dataset.snippetToggle);
-      if (snippet) button.hidden = !snippet.classList.contains('expanded') && snippet.scrollHeight <= snippet.clientHeight + 1;
-    });
+  const data = response.status === 204 ? {} : await response.json().catch(() => ({}));
+  if (response.status === 401 && retry && generation === state.authGeneration && state.user && !['/login', '/session'].includes(path)) {
+    await reauthenticate();
+    return api(path, method, payload, false);
   }
-  document.addEventListener('click', event => {
-    const button = event.target.closest('[data-snippet-toggle]');
-    if (!button) return;
-    const snippet = document.getElementById(button.dataset.snippetToggle);
-    if (!snippet) return;
-    const expanded = snippet.classList.toggle('expanded');
-    button.setAttribute('aria-expanded', String(expanded));
-    button.textContent = expanded ? '收起摘要' : '展开摘要';
+  if (!response.ok) {
+    const error = new Error(friendlyError(data, response.status));
+    error.status = response.status;
+    error.fields = data.errors || (Array.isArray(data.detail) ? data.detail.map(item => ({ field: item.loc?.at(-1), message: t("copy.d05af7799c") })) : []);
+    throw error;
+  }
+  return data;
+}
+function errorBox(form, error) {
+  if (!form?.isConnected) { notify(error.message, true); return; }
+  form.querySelectorAll('.field-error').forEach(node => { node.textContent = ''; });
+  form.querySelectorAll('[aria-invalid]').forEach(node => { node.removeAttribute('aria-invalid'); });
+  const box = form.querySelector('.form-error');
+  if (box) box.textContent = error.message;
+  for (const item of error.fields || []) {
+    const name = String(item.field || '').split('.').at(-1);
+    const input = form.elements.namedItem(name);
+    if (!input?.setAttribute) continue;
+    input.setAttribute('aria-invalid', 'true');
+    const marker = [...form.querySelectorAll('[data-error-for]')].find(node => node.dataset.errorFor === name);
+    if (marker) { marker.textContent = /[\u3400-\u9fff]/.test(item.message) ? item.message : t("copy.3c2e6ec3dd"); marker.id = `${input.id}-error`; input.setAttribute('aria-describedby', marker.id); }
+  }
+  form.querySelector('[aria-invalid="true"]')?.focus();
+}
+function rememberSession(data) {
+  if (state.user?.id !== data.user.id) state.authGeneration++;
+  state.user = data.user;
+  state.csrf = data.csrf_token;
+  state.expiresAt = data.expires_at || data.session?.expires_at || null;
+  state.expiryWarned = false;
+}
+async function reauthenticate() {
+  if (reauthPending) return reauthPending;
+  const restoreFocus = document.activeElement;
+  const node = document.createElement('dialog');
+  node.id = 'reauth-dialog';
+  node.setAttribute('aria-labelledby', 'reauth-title');
+  setContent(node, reauthForm(state));
+  document.body.append(node);
+  node.addEventListener('cancel', event => event.preventDefault());
+  node.showModal();
+  get('#reauth-password').focus();
+  reauthPending = new Promise((resolve, reject) => { node._resolve = resolve; node._reject = reject; });
+  await reauthPending;
+  node.close(); node.remove(); reauthPending = null;
+  restoreFocus?.focus();
+}
+function clearPrivateState() {
+  state.user = null; state.csrf = ''; state.secret = null; state.overview = null; state.searchResult = null;
+  state.searchDraft = {}; state.tests = {}; state.data = {}; state.providers = []; state.catalog = []; state.snippets = {}; state.filters = {};
+  state.auditFilters = {}; state.auditOffset = 0; state.window = 'process'; state.expiresAt = null; state.expiryWarned = false; state.confirmAction = null; state.currentURL = '';
+  state.menuOpen = false; document.body.classList.remove('menu-open'); state.dirtyForms.clear(); state.dialogDirty = false; state.editor = null;
+  state.authGeneration++; state.revision++; closeDialog(true);
+  opener = null; setContent(document.getElementById('notice'), html``);
+}
+function login() { setContent(app, loginView()); document.title = t("copy.fecec8e8ae"); get('#username')?.focus(); }
+function locationState() {
+  const [page, query = ''] = location.hash.slice(1).split('?');
+  const params = new URLSearchParams(query);
+  return { area: state.user?.role === 'admin' && !/^\/app(?:\/|$)/.test(location.pathname) ? 'admin' : 'user', page: page || 'overview', params };
+}
+async function enterWorkspace() {
+  const route = locationState();
+  if (state.user.role !== 'admin' && route.area === 'admin') route.area = 'user';
+  state.area = route.area;
+  setContent(app, shell(state));
+  await navigate(route.page, { area: route.area, replace: true, params: route.params, force: true });
+}
+function hasUnsaved() { return state.dialogDirty || state.dirtyForms.size > 0; }
+function confirmLeave() { return !hasUnsaved() || window.confirm(t("copy.35b71b16d8")); }
+function markClean(form) { state.dirtyForms.delete(form?.id); if (form?.closest('#dialog')) state.dialogDirty = false; }
+async function navigate(page, { area = state.area, replace = false, params = new URLSearchParams(), force = false, history = true } = {}) {
+  if (!state.user) return;
+  if (!force && !confirmLeave()) { restoreLocation(); return; }
+  if (state.secret && !window.confirm(t("copy.fd3c79cd8b"))) { restoreLocation(); return; }
+  const targetArea = area === 'admin' && state.user.role === 'admin' ? 'admin' : 'user';
+  const pages = targetArea === 'admin' ? adminPages : userPages;
+  if (!Object.hasOwn(pages, page)) page = 'overview';
+  captureSearchDraft();
+  state.dirtyForms.clear(); state.dialogDirty = false;
+  closeDialog(true);
+  const changeArea = state.area !== targetArea;
+  state.area = targetArea; state.page = page;
+  if (targetArea === 'user') state.window = 'process';
+  const url = `${targetArea === 'admin' ? '/admin/' : '/app/'}#${page}${params.size ? '?' + params.toString() : ''}`;
+  if (history && (replace || state.currentURL !== url)) window.history[replace ? 'replaceState' : 'pushState'](null, '', url);
+  state.currentURL = url;
+  if (changeArea) setContent(app, shell(state));
+  if (page === 'search' && params.size) state.searchDraft = { ...state.searchDraft, ...Object.fromEntries(params) };
+  updateNav(); setMenu(false);
+  const revision = ++state.revision;
+  const main = get('#main');
+  setContent(main, html`${head(state)}<div class="skeleton" role="status" aria-label="${t("copy.f020e4630a")}"><div></div><div></div><div></div></div>`);
+  try {
+    const loaded = await loadPage();
+    if (!loaded || state.revision !== revision) return;
+    renderPage(); get('[data-testid="page-title"]')?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0 });
+    if (page === 'providers' && params.get('provider')) openProvider(state.providers.find(p => p.name === params.get('provider')));
+    if (page === 'overview' && params.get('request')) showRequest(params.get('request'));
+  } catch (error) {
+    if (state.revision !== revision) return;
+    setContent(main, html`${head(state)}<section class="panel">${empty(t("copy.f3f42080d8"), error.message)}<div class="panel-body">${button(t("copy.7bdd5ce1e2"), 'refresh')}</div></section>`);
+    notify(error.message, true);
+  }
+}
+function updateNav() {
+  updateVersion();
+  document.querySelectorAll('.workspace-nav-link').forEach(node => {
+    const active = node.dataset.area === state.area && node.dataset.page === state.page;
+    node.classList.toggle('active', active);
+    if (active) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current');
   });
-  window.addEventListener('resize', () => requestAnimationFrame(updateSnippetControls));
-  document.querySelector('.skip-link').addEventListener('click', event => {
-    const main = document.getElementById('main');
-    if (!main) return;
-    event.preventDefault();
-    main.focus({ preventScroll: true });
-    main.scrollIntoView({ block: 'start' });
-  });
-  function notify(message, error = false) {
-    const node = document.getElementById('notice');
-    node.textContent = message;
-    node.className = `toast${error ? ' error' : ''}`;
-    node.hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { node.hidden = true; }, error ? 9000 : 4500);
-  }
-  async function api(path, method = 'GET', body) {
-    const headers = { Accept: 'application/json' };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    if (method !== 'GET') headers['X-CSRF-Token'] = state.csrf;
-    const response = await fetch(`/admin/api${path}`, { method, credentials: 'same-origin', headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    const data = response.status === 204 ? {} : await response.json().catch(() => ({}));
-    if (!response.ok) {
-      if (response.status === 401 && path !== '/login') { state.user = null; state.csrf = ''; dialog.close(); login(); }
-      const detail = typeof data.detail === 'string' ? data.detail : Array.isArray(data.detail) ? data.detail.map(item => item.msg).join('；') : `请求失败（${response.status}）`;
-      throw new Error(detail);
+  const info = pageInfo(state);
+  get('#breadcrumb').textContent = info[0]; document.title = `${info[0]} · bensz-search`;
+}
+function updateVersion() {
+  const node = get('#app-version');
+  if (!node) return;
+  const version = state.overview?.version;
+  node.textContent = version ? `v${version}` : t("copy.ba21f3bbaa");
+  node.title = version ? `${t("copy.6b727b3b96")} ${version}` : t("copy.1ed59e0dde");
+  node.setAttribute('aria-label', node.title);
+}
+async function loadPage() {
+  const page = state.page;
+  const area = state.area;
+  const window = state.window;
+  const revision = state.revision;
+  const loadRevision = ++state.loadRevision;
+  const needsOverview = ['overview', 'search'].includes(page) || !state.overview;
+  const overviewPromise = needsOverview ? api(`/overview?window=${window}`) : Promise.resolve(null);
+  let path = null;
+  if (page === 'providers') path = '/providers';
+  if (page === 'keys') path = '/keys' + (area === 'admin' ? '?scope=all' : '');
+  if (page === 'overview' && area === 'user') path = '/keys';
+  if (page === 'users') path = '/users';
+  if (page === 'settings') path = '/sessions';
+  if (page === 'help') path = '/releases';
+  if (page === 'audit') {
+    const params = new URLSearchParams({ limit: '50', offset: String(state.auditOffset) });
+    for (const [key, value] of Object.entries(state.auditFilters)) {
+      if (!value) continue;
+      params.set(key, ['since', 'until'].includes(key) ? String(new Date(value).getTime() / 1000) : value);
     }
-    return data;
+    path = '/audit?' + params;
   }
-  function errorBox(form, error) { form.querySelector('.form-error').textContent = error.message; }
-  function busy(button, value) { if (button) { button.disabled = value; button.setAttribute('aria-busy', String(value)); } }
-  function login() {
-    state.revision++;
-    state.overview = null;
-    state.area = null;
-    state.navExpanded = { admin: true, user: true };
-    state.menuOpen = false;
-    document.title = userArea() ? 'bensz-search · 登录用户工作台' : 'bensz-search · 统一搜索，智能路由';
-    app.innerHTML = `<div class="login-layout">
-      <header class="login-header"><div class="login-nav"><a class="brand" href="/" aria-label="bensz-search 首页">${brand()}</a><nav class="login-nav-links" aria-label="首页导航"><a href="#search-capabilities">搜索能力</a><a href="/api/docs" target="_blank" rel="noopener noreferrer">API 文档 <span aria-hidden="true">↗</span></a><a class="login-console-link" href="#login-form">进入控制台 <span aria-hidden="true">→</span></a></nav></div></header>
-      <main class="login-content" id="main" tabindex="-1"><section class="login-intro" aria-labelledby="home-title"><p class="eyebrow login-eyebrow">SEARCH INFRASTRUCTURE, SIMPLIFIED</p><h1 id="home-title">让每一次查询，<br><span>找到合适的来源。</span></h1><p class="lead">连接搜索服务，汇聚可信来源。<br>为你的应用与 AI Agent，提供统一的搜索入口。</p><a class="home-action" href="#login-form">配置你的搜索服务 <span aria-hidden="true">→</span></a><div class="search-flow" aria-label="搜索处理流程示意"><span>你的查询</span><span class="flow-arrow" aria-hidden="true">→</span><span>智能路由</span><span class="flow-arrow" aria-hidden="true">→</span><span>来源与结果</span></div><p class="flow-caption">多服务选择 · 超时回退 · 结果融合</p></section>
-      <section class="login-main" aria-labelledby="login-title"><form class="login-form" id="login-form"><p class="eyebrow">${userArea() ? 'YOUR PERSONAL WORKSPACE' : 'YOUR SEARCH WORKSPACE'}</p><h2 id="login-title">${userArea() ? '登录用户工作台' : '登录搜索控制台'}</h2><p class="intro">使用管理员为你创建的账号登录。</p><div class="form-error" role="alert"></div><div class="field"><label for="username">用户名</label><input id="username" name="username" autocomplete="username" required maxlength="64" placeholder="输入用户名" autofocus></div><div class="field"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" required placeholder="输入登录密码"></div><button class="btn primary" type="submit">${userArea() ? '进入我的工作台' : '登录控制台'} <span aria-hidden="true">→</span></button><p class="login-footer">账号由部署管理员提供。<br>登录后可搜索、管理访问密钥与个人设置。</p></form><p class="login-help">一个入口，连接你的搜索基础设施。</p></section></main>
-      <section class="home-capabilities" id="search-capabilities" aria-label="搜索能力"><div class="capability"><span class="capability-number">01 / CONNECT</span><h2>连接搜索来源</h2><p>配置 Search API，测试连接，统一管理服务。</p></div><div class="capability"><span class="capability-number">02 / SEARCH</span><h2>验证每一次搜索</h2><p>运行真实查询，检查来源与路由执行详情。</p></div><div class="capability"><span class="capability-number">03 / INTEGRATE</span><h2>接入你的应用</h2><p>创建独立访问密钥，通过统一接口调用。</p></div></section>
-      <footer class="home-footer"><span>bensz-search · 统一搜索，智能路由</span><span>为应用与 AI Agent 而构建</span></footer>
-    </div>`;
-    document.getElementById('login-form').addEventListener('submit', async event => {
-      event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('button');
-      busy(button, true); form.querySelector('.form-error').textContent = '';
-      try { const data = await api('/login', 'POST', Object.fromEntries(new FormData(form))); state.user = data.user; state.csrf = data.csrf_token; await enterWorkspace(); }
-      catch (error) { errorBox(form, error); }
-      finally { busy(button, false); }
-    });
+  const [overview, data] = await Promise.all([overviewPromise, path ? api(path) : Promise.resolve({})]);
+  if (revision !== state.revision || loadRevision !== state.loadRevision) return false;
+  if (overview) { state.overview = overview; state.providers = overview.providers || []; updateVersion(); }
+  state.data = data;
+  if (page === 'providers') { state.providers = data.providers || []; state.catalog = data.catalog || []; }
+  if (state.overview?.health) state.providers.forEach(provider => { provider.health ||= state.overview.health.find(row => row.name === provider.name); });
+  return true;
+}
+function renderPage() { setContent(get('#main'), views[state.page](state)); }
+async function refresh({ local = true } = {}) {
+  const revision = state.revision;
+  const focus = document.activeElement;
+  const action = focus?.dataset.action;
+  const value = focus?.dataset.value;
+  const scroll = window.scrollY;
+  get('#main')?.setAttribute('aria-busy', 'true');
+  try {
+    const loaded = await loadPage();
+    if (!loaded || revision !== state.revision) return;
+    const renderTable = { providers: providerTable, keys: keyTable, users: userTable }[state.page];
+    if (local && state.page === 'settings' && get('#sessions-panel')) setContent(get('#sessions-panel'), sessionPanel(state));
+    else if (local && renderTable && get('#table-results')) setContent(get('#table-results'), renderTable(state)); else renderPage();
+    window.scrollTo({ top: scroll });
+    const matching = [...document.querySelectorAll('[data-action]')].find(node => node.dataset.action === action && node.dataset.value === value);
+    if (matching) matching.focus({ preventScroll: true }); else if (focus?.isConnected) focus.focus({ preventScroll: true });
+  } finally { get('#main')?.removeAttribute('aria-busy'); }
+}
+function setMenu(value) {
+  state.menuOpen = value; get('.sidebar')?.classList.toggle('nav-open', value);
+  const button = get('[data-action="menu"]');
+  button?.setAttribute('aria-expanded', String(value)); button?.setAttribute('aria-controls', 'navigation');
+  const overlay = get('.nav-backdrop'); if (overlay) overlay.hidden = !value;
+  document.body.classList.toggle('menu-open', value);
+  if (get('.workspace')) get('.workspace').inert = value;
+  if (value) get('.sidebar .workspace-nav-link')?.focus();
+}
+function openDialog(title, content, { drawer = true, dirty = false } = {}) {
+  if (dialog.open && !closeDialog()) return false;
+  opener = document.activeElement;
+  state.dialogDirty = dirty;
+  dialog.className = drawer ? 'drawer' : '';
+  setContent(dialog, html`<div class="dialog-head"><h2 id="dialog-title">${title}</h2>${button(t("common.close"), 'dialog-close', '', 'dialog-close')}</div><div class="dialog-body">${content}</div>`);
+  dialog.showModal(); dialog.querySelector('input:not(:disabled),button')?.focus();
+  return true;
+}
+function closeDialog(force = false) {
+  if (!force && state.secret && !window.confirm(t("copy.73f30a5e2d"))) return false;
+  if (!force && state.dialogDirty && !window.confirm(t("copy.7069e02be8"))) return false;
+  state.secret = null; state.dialogDirty = false;
+  dialog.querySelectorAll('form').forEach(form => state.dirtyForms.delete(form.id));
+  dialog.close(); setContent(dialog, html``);
+  if (opener?.isConnected) opener.focus({ preventScroll: true });
+  return true;
+}
+dialog.addEventListener('cancel', event => { event.preventDefault(); closeDialog(); });
+function confirmAction(title, description, action, confirmText) {
+  if (!openDialog(title, html`<form id="confirm-form"><p>${description}</p>${formError()}<div class="form-actions">
+    ${button(t("common.cancel"), 'dialog-close')}<button class="btn danger" type="submit">${confirmText}</button></div></form>`, { drawer: false })) return;
+  state.confirmAction = action;
+}
+async function openProvider(provider) {
+  if (!state.catalog.length) {
+    const data = await api('/providers'); state.catalog = data.catalog || [];
+    if (!state.providers.length) state.providers = data.providers || [];
   }
-  function updateHeaderVersion() {
-    const node = document.getElementById('app-version');
-    if (!node) return;
-    const version = state.overview?.version;
-    const label = version ? `bensz-search 软件版本 ${version}` : 'bensz-search 版本未提供';
-    node.textContent = version ? `v${version}` : '版本未提供';
-    node.title = label;
-    node.setAttribute('aria-label', label);
-    node.hidden = false;
+  if (!openDialog(provider ? `${t("copy.0518365699")} ${provider.name}` : t("copy.01a1f239e9"), providerForm(state, provider))) return;
+  state.editor = provider || null;
+  updateProviderFields(state, Boolean(provider), !provider);
+}
+function openTest(name) { openDialog(`${t("copy.6aa8f49cc9")} ${name}`, testForm(state, name)); }
+function showRequest(id) {
+  const request = state.overview?.metrics?.recent?.find(row => row.request_id === id);
+  if (request) openDialog(t("copy.0ec1e85b0c"), html`<p class="mono">${id}</p>${button(t("copy.b9431e8522"), 'request-share', id)}${timeline(request)}`);
+  else notify(t("copy.10bb4ae8ff"), true);
+}
+function captureSearchDraft() {
+  const form = get('#search-form');
+  if (form) state.searchDraft = Object.fromEntries(new FormData(form));
+}
+function searchPayload() {
+  captureSearchDraft(); const draft = state.searchDraft;
+  const constraints = {};
+  for (const key of ['freshness', 'authority', 'recall', 'precision', 'semantic', 'source_diversity', 'latency', 'cost']) constraints[key] = draft[key] || 'auto';
+  for (const key of ['latency_budget_ms', 'cost_budget_usd']) if (draft[key] !== '' && draft[key] != null) constraints[key] = Number(draft[key]);
+  return { query: draft.query || '', search_tool_name: draft.search_tool_name || 'auto', profile: { intent: draft.intent || 'auto' }, constraints,
+    max_results: Number(draft.max_results || 10), fusion: draft.fusion || 'weighted_rrf', debug: true,
+    search_domain_filter: String(draft.search_domain_filter || '').split(',').map(value => value.trim()).filter(Boolean) };
+}
+async function copy(value) {
+  try { await navigator.clipboard.writeText(value); notify(t("copy.cce28dd1fc")); }
+  catch {
+    if (state.secret) { const range = document.createRange(); range.selectNodeContents(get('#new-key')); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); notify(t("copy.ef78a62e7a"), true); }
+    else openDialog(t("copy.8f0b2d9549"), html`<p>${t("copy.f726d4409e")}</p><pre class="code key-value">${value}</pre>`, { drawer: false });
   }
-  function shell() {
-    state.area = currentArea();
-    const groups = admin() ? [['admin', '管理员', pages], ['user', '用户', userPages]] : [['user', '用户', userPages]];
-    const nav = groups.map(([area, label, table]) => {
-      const expanded = state.navExpanded[area];
-      const target = `${area}-navigation-items`;
-      const base = area === 'admin' ? '/admin/' : '/app/';
-      return `<section class="workspace-nav-group"><button class="workspace-nav-group-toggle" type="button" data-nav-toggle="${area}" aria-controls="${target}" aria-expanded="${expanded}"><span>${label}</span><span class="group-chevron" aria-hidden="true">⌄</span></button><nav id="${target}" aria-label="${label}导航"${expanded ? '' : ' hidden'}>${Object.entries(table).map(([page, info]) => `<a class="workspace-nav-link" href="${base}#${page}" data-area="${area}" data-page="${page}">${icon(page)}<span>${info[0]}</span><span class="nav-chevron" aria-hidden="true">›</span></a>`).join('')}</nav></section>`;
-    }).join('');
-    app.innerHTML = `<div class="layout ${adminArea() ? 'admin-shell' : 'user-shell'}"><aside class="sidebar${state.menuOpen ? ' nav-open' : ''}"><div class="sidebar-header"><a class="brand" href="/" aria-label="bensz-search 首页">${brand()}</a><button class="btn small menu-toggle" id="menu-toggle" aria-expanded="${state.menuOpen}" aria-controls="navigation">菜单</button></div><p class="brand-caption">搜索服务控制台</p><div class="nav workspace-navigation" id="navigation">${nav}</div><div class="sidebar-foot"><span class="sidebar-foot-icon" aria-hidden="true">${icon(adminArea() ? 'providers' : 'search')}</span><div><strong>${workspaceName()}</strong><span>${adminArea() ? '管理服务与访问权限' : '搜索与个人访问密钥'}</span></div></div></aside><div class="workspace"><header class="topbar"><span class="topbar-title">${workspaceName()} <span class="breadcrumb-divider" aria-hidden="true">/</span> <span id="breadcrumb">${pageInfo('overview')[0]}</span></span><div class="account"><span class="app-version" id="app-version" title="正在读取软件版本" hidden></span><span class="avatar" aria-hidden="true">${escape(state.user.username.slice(0, 1).toUpperCase())}</span><span class="user-name">${escape(state.user.username)}</span><span class="role">${admin() ? '管理员' : '成员'}</span><button class="btn ghost small" id="logout">退出登录</button></div></header><main id="main" class="content" tabindex="-1"></main></div></div>`;
-    document.querySelectorAll('[data-area][data-page]').forEach(link => link.addEventListener('click', event => {
-      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-      event.preventDefault();
-      state.menuOpen = false;
-      document.querySelector('.sidebar').classList.remove('nav-open');
-      document.getElementById('menu-toggle').setAttribute('aria-expanded', 'false');
-      navigate(link.dataset.page, { area: link.dataset.area });
-    }));
-    document.querySelectorAll('[data-nav-toggle]').forEach(button => button.addEventListener('click', () => {
-      const area = button.dataset.navToggle;
-      state.navExpanded[area] = !state.navExpanded[area];
-      button.setAttribute('aria-expanded', String(state.navExpanded[area]));
-      document.getElementById(button.getAttribute('aria-controls')).hidden = !state.navExpanded[area];
-    }));
-    document.getElementById('menu-toggle').addEventListener('click', event => { state.menuOpen = !state.menuOpen; document.querySelector('.sidebar').classList.toggle('nav-open', state.menuOpen); event.currentTarget.setAttribute('aria-expanded', String(state.menuOpen)); });
-    document.getElementById('logout').addEventListener('click', async event => { busy(event.currentTarget, true); try { await api('/logout', 'POST', {}); state.user = null; state.csrf = ''; login(); } catch (error) { notify(error.message, true); busy(event.currentTarget, false); } });
-    if (state.overview) updateHeaderVersion();
-  }
-  function head(page, actions = '') { const [title, eyebrow, description] = pageInfo(page); return `<div class="page-head"><div><p class="eyebrow">${eyebrow}</p><h1>${title}</h1><p>${description}</p></div>${actions}</div>`; }
-  function empty(title, description) { return `<div class="empty"><h3>${escape(title)}</h3><p>${escape(description)}</p></div>`; }
-  async function navigate(page, { replace = false, history = true, area = currentArea() } = {}) {
-    if (!state.user) return;
-    area = area === 'admin' && admin() ? 'admin' : 'user';
-    if (!pageInfo(page, area)) page = 'overview';
-    if (history) {
-      const url = `${area === 'admin' ? '/admin/' : '/app/'}${location.search}#${page}`;
-      if (replace) window.history.replaceState(null, '', url);
-      else if (`${location.pathname}${location.search}${location.hash}` !== url) window.history.pushState(null, '', url);
+}
+function share(page, params) {
+  const url = new URL(`${state.area === 'admin' ? '/admin/' : '/app/'}#${page}?${new URLSearchParams(params)}`, location.origin);
+  return copy(url.href);
+}
+function enabledWarning(provider) {
+  return provider?.enabled && state.providers.filter(p => p.enabled).length === 1 ? t("copy.2fe5648583") : '';
+}
+async function performProviderToggle(name) {
+  const provider = state.providers.find(p => p.name === name);
+  const warning = enabledWarning(provider);
+  const save = async () => {
+    const allowed = ['name', 'provider', 'api_base', 'engines', 'timeout_ms', 'search_model', 'search_context_size', 'max_output_tokens', 'source_family', 'estimated_cost_usd'];
+    const payload = Object.fromEntries(allowed.filter(key => provider[key] !== undefined).map(key => [key, provider[key]]));
+    payload.enabled = !provider.enabled;
+    await api(`/providers/${encodeURIComponent(name)}`, 'PUT', payload); await refresh(); notify(t("copy.24ab1478b0"));
+  };
+  if (warning) confirmAction(t("copy.d836cb6c7f"), warning, save, t("copy.b6c82c2d56")); else await save();
+}
+const actions = {
+  navigate: node => navigate(node.dataset.page, { area: node.dataset.area }), go: node => navigate(node.dataset.value), refresh: () => refresh(),
+  menu: () => setMenu(!state.menuOpen), 'menu-close': () => { setMenu(false); get('[data-action="menu"]')?.focus(); },
+  'nav-group': node => { const expanded = node.getAttribute('aria-expanded') !== 'true'; node.setAttribute('aria-expanded', String(expanded)); document.getElementById(node.getAttribute('aria-controls')).hidden = !expanded; },
+  'dialog-close': () => closeDialog(), 'notice-close': node => node.closest('.toast').remove(),
+  logout: () => {
+    if (!confirmLeave()) return;
+    if (state.secret && !window.confirm(t("copy.43250a3c3b"))) return;
+    return api('/logout', 'POST', {}).then(() => { clearPrivateState(); login(); });
+  },
+  'provider-add': () => openProvider(), 'provider-edit': node => openProvider(state.providers.find(p => p.name === node.dataset.value)),
+  'provider-share': node => share('providers', { provider: node.dataset.value }),
+  'provider-test': node => openTest(node.dataset.value), 'provider-toggle': node => performProviderToggle(node.dataset.value),
+  'provider-delete': node => confirmAction(t("copy.f19f78c822"), `${t("copy.9fad3beb44")}${node.dataset.value}${t("copy.8e44226292")}${enabledWarning(state.providers.find(p => p.name === node.dataset.value))}`,
+    async () => { await api(`/providers/${encodeURIComponent(node.dataset.value)}`, 'DELETE'); await refresh(); notify(t("copy.69100b1b55")); }, t("copy.6a39f69d94")),
+  'provider-common-engines': () => { get('#provider-engines').value = (state.catalog.find(p => p.provider === 'searxng')?.default_engines || []).join(', '); state.dialogDirty = true; },
+  'provider-sync': async node => {
+    const result = await api(`/providers/${encodeURIComponent(node.dataset.value)}/engines/sync`, 'POST', {});
+    await refresh(); notify(`${t("copy.830cd93339")}${(result.verified_engines || []).join(', ') || t("copy.ad10fed6f9")}`);
+    if (dialog.open) {
+      const note = get('#searxng-options .note');
+      if (note) setContent(note, html`<p>${t("copy.00097d89c4")}${(result.verified_engines || []).join(', ') || t("copy.484d556139")}</p><p>${t("copy.8124cd7ac2")}${result.evidence}</p>`);
     }
-    if (state.area !== area) shell();
-    state.page = page; const revision = ++state.revision;
-    document.querySelectorAll('[data-area][data-page]').forEach(node => { const active = node.dataset.area === area && node.dataset.page === page; node.classList.toggle('active', active); if (active) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); });
-    document.getElementById('breadcrumb').textContent = pageInfo(page)[0];
-    document.title = `${pageInfo(page)[0]} · ${workspaceName()} · bensz-search`;
-    const main = document.getElementById('main'); main.innerHTML = `${head(page)}<div class="loading" role="status">正在读取最新配置…</div>`;
+  },
+  'provider-export': async () => {
+    const data = await api('/providers/export'); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'bensz-search-providers.json'; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    notify(t("copy.06e5a1efe8"));
+  },
+  'provider-import': () => openDialog(t("copy.b3c8f4cba9"), importForm()),
+  'request-detail': node => showRequest(node.dataset.value), 'request-share': node => share('overview', { request: node.dataset.value }),
+  'search-curl': () => { const payload = searchPayload(); return copy(`curl '${location.origin}/search' \\\n  -H 'Authorization: Bearer YOUR_API_KEY' \\\n  -H 'Content-Type: application/json' \\\n  -d '${JSON.stringify(payload).replaceAll("'", "'\\''")}'`); },
+  'search-share': () => { captureSearchDraft(); return share('search', state.searchDraft); },
+  snippet: node => { const expanded = node.closest('.result').querySelector('.result-snippet').classList.toggle('expanded'); node.textContent = expanded ? t("copy.fcd57ae6f6") : t("copy.60d4cbf2ff"); node.setAttribute('aria-expanded', String(expanded)); },
+  'key-create': () => openDialog(t("copy.4e800de275"), keyForm()),
+  'key-revoke': node => confirmAction(t("copy.b115c361e1"), t("copy.4d7eb33ed9"),
+    async () => { await api(`/keys/${encodeURIComponent(node.dataset.value)}${state.area === 'admin' ? '?scope=all' : ''}`, 'DELETE'); await refresh(); notify(t("copy.c45b2a26d9")); }, t("copy.29b78a203e")),
+  'copy-key': () => copy(state.secret), 'key-done': () => closeDialog(true),
+  'user-create': () => { state.editor = null; openDialog(t("copy.7db1237290"), userForm()); },
+  'user-edit': node => { state.editor = state.data.users.find(user => String(user.id) === node.dataset.value); openDialog(t("copy.7645d83833"), userForm(state.editor)); },
+  'user-delete': node => confirmAction(t("copy.963d52729b"), t("copy.5ff609bfa0"),
+    async () => { await api(`/users/${encodeURIComponent(node.dataset.value)}`, 'DELETE'); await refresh(); notify(t("copy.7ad39d9c27")); }, t("copy.ceae8cfecd")),
+  'sessions-revoke': () => confirmAction(t("copy.54a43c4b0e"), t("copy.20a3b210b5"),
+    async () => { await api('/sessions/revoke-others', 'POST', {}); await refresh(); notify(t("copy.d96d4f89d0")); }, t("copy.16f39991a0")),
+  'copy-snippet': node => copy(state.snippets[node.dataset.value]),
+  'audit-prev': async () => { if (state.auditOffset > 0) { state.auditOffset -= 50; await refresh({ local: false }); } },
+  'audit-next': async () => { if (state.auditOffset + 50 < state.data.total) { state.auditOffset += 50; await refresh({ local: false }); } },
+};
+const submitters = {
+  'login-form': async form => { const data = await api('/login', 'POST', Object.fromEntries(new FormData(form)), false); rememberSession(data); markClean(form); await enterWorkspace(); },
+  'reauth-form': async form => {
+    const node = form.closest('dialog');
+    const data = await api('/login', 'POST', { username: state.user.username, password: form.elements.password.value }, false);
+    const previousRole = state.user.role;
+    rememberSession(data); form.elements.password.value = '';
+    if (previousRole !== state.user.role) { node._resolve(); closeDialog(true); state.dirtyForms.clear(); await enterWorkspace(); } else node._resolve();
+    notify(t("copy.b83ae0528e"));
+  },
+  'confirm-form': async form => { await state.confirmAction(); markClean(form); closeDialog(true); },
+  'provider-form': async (form, submitter) => {
+    const original = state.editor;
+    const payload = providerPayload(form, original);
+    if (original?.enabled && !payload.enabled && enabledWarning(original) && !window.confirm(enabledWarning(original) + t("copy.edbeace735"))) return;
+    await api(original ? `/providers/${encodeURIComponent(original.name)}` : '/providers', original ? 'PUT' : 'POST', payload);
+    markClean(form); closeDialog(true); await refresh(); notify(t("copy.bb22e9d840"));
+    if (submitter.value === 'test') openTest(payload.name);
+  },
+  'test-form': async form => {
+    const name = form.dataset.provider; const query = form.elements.query.value;
+    const generation = state.authGeneration;
+    const revision = state.revision; setContent(get('#test-results'), html`<p role="status">${t("copy.713fc343f0")}</p>`);
+    const data = await api(`/providers/${encodeURIComponent(name)}/test`, 'POST', { query });
+    if (generation !== state.authGeneration) return;
+    state.tests[name] = { query, data };
+    if (revision === state.revision && get('#test-form') === form) setContent(get('#test-results'), testResults(data));
+  },
+  'search-form': async form => {
+    const payload = searchPayload(); const revision = state.revision; const generation = state.authGeneration;
+    get('#results-meta').textContent = t("copy.2f94db33f8");
+    setContent(get('#search-results'), html`<div class="skeleton" role="status" aria-label="${t("copy.71a7040350")}"><div></div><div></div></div>`);
     try {
-      const needsOverview = ['overview', 'search'].includes(page) || !state.overview;
-      const overviewRequest = needsOverview ? api('/overview').then(data => {
-        if (state.revision === revision) { state.overview = data; state.providers = data.providers || []; updateHeaderVersion(); }
-        return data;
-      }) : Promise.resolve(null);
-      const [overviewData, pageData] = await Promise.all([
-        overviewRequest,
-        page === 'overview' && !adminArea() ? api('/keys') : ['providers', 'keys', 'users'].includes(page) ? api(`/${page}`) : Promise.resolve({}),
-      ]);
-      if (state.revision !== revision) return;
-      const data = ['overview', 'search'].includes(page) ? overviewData : pageData;
-      if (page === 'providers') { state.providers = data.providers || []; state.catalog = data.catalog || []; }
-      if (page === 'overview' && !adminArea()) { renderUserOverview(main, data, pageData.keys || []); return; }
-      ({ overview: renderOverview, providers: renderProviders, search: renderSearch, keys: renderKeys, users: renderUsers, settings: renderSettings, integration: renderIntegration })[page](main, data);
+      const data = await api('/search', 'POST', payload);
+      if (generation !== state.authGeneration) return;
+      state.searchResult = data;
+      if (state.revision === revision && get('#search-results')) { setContent(get('#search-results'), searchResults(state)); get('#results-meta').textContent = `${fmt(data.results?.length)} ${t("copy.bd0bedc6f4")}`; }
     } catch (error) {
-      if (state.revision !== revision) return;
-      updateHeaderVersion();
-      main.innerHTML = `${head(page)}<div class="panel">${empty('无法加载', error.message)}<div class="panel-body retry-actions"><button class="btn" id="retry">重新加载</button></div></div>`;
-      document.getElementById('retry').addEventListener('click', () => navigate(page));
+      if (state.revision === revision) { setContent(get('#search-results'), state.searchResult ? searchResults(state) : empty(t("copy.43034354a9"), t("copy.5ea28dbb5a"))); get('#results-meta').textContent = t("copy.126fbf59cf"); }
+      throw error;
     }
+  },
+  'key-form': async form => {
+    const fields = new FormData(form); const scopes = [];
+    if (fields.has('scope_search')) scopes.push('search'); if (fields.has('scope_protocol')) scopes.push('protocol');
+    if (!scopes.length) throw new Error(t("copy.6e44d4b4ad"));
+    const payload = { name: fields.get('name'), scopes };
+    if (fields.get('expires_at')) { payload.expires_at = new Date(fields.get('expires_at')).getTime() / 1000; if (payload.expires_at <= Date.now() / 1000) throw new Error(t("copy.852da0a8f0")); }
+    const data = await api('/keys', 'POST', payload);
+    markClean(form); closeDialog(true);
+    openDialog(t("copy.bf298fae98"), html`<div class="note warning">${t("copy.58ea1565dd")}</div><div class="key-value" id="new-key" data-testid="new-key">${data.key}</div>
+      <div class="form-actions">${button(t("copy.d22d5fd54c"), 'copy-key')}${button(t("copy.0e1df87d77"), 'key-done', '', 'primary')}</div>`, { drawer: false });
+    state.secret = data.key; await refresh();
+  },
+  'user-form': async form => {
+    const fields = new FormData(form); const original = state.editor;
+    const payload = original ? { role: fields.get('role'), enabled: fields.has('enabled') } : Object.fromEntries(fields);
+    if (original && fields.get('password')) payload.password = fields.get('password');
+    await api(original ? `/users/${encodeURIComponent(original.id)}` : '/users', original ? 'PUT' : 'POST', payload);
+    markClean(form); closeDialog(true); await refresh(); notify(t("copy.6d162be163"));
+    if (original?.id === state.user.id && original.role !== payload.role) { state.user.role = payload.role; await enterWorkspace(); }
+  },
+  'password-form': async form => {
+    const fields = new FormData(form);
+    if (fields.get('new_password') !== fields.get('confirm_password')) throw new Error(t("copy.a2ba2545a6"));
+    await api('/password', 'POST', { current_password: fields.get('current_password'), new_password: fields.get('new_password') });
+    markClean(form); clearPrivateState(); login(); notify(t("copy.207dcb8e9b"));
+  },
+  'audit-form': async form => { state.auditFilters = Object.fromEntries(new FormData(form)); state.auditOffset = 0; await refresh({ local: false }); },
+  'import-form': async form => {
+    const file = form.elements.file.files[0]; if (!file || file.size > 1024 * 1024) throw new Error(t("copy.a54158bc43"));
+    let data; try { data = JSON.parse(await file.text()); } catch { throw new Error(t("copy.f47fb5c131")); }
+    if (data.version !== 1 || !Array.isArray(data.providers)) throw new Error(t("copy.7c713ea92f"));
+    if (data.providers.some(p => p.api_key || p.has_api_key || p.verified_engines?.length || p.engine_evidence)) throw new Error(t("copy.51c575ec39"));
+    await api('/providers/import', 'POST', data); markClean(form); closeDialog(true); await refresh(); notify(t("copy.e8b96eaa3d"));
+  },
+};
+// A single event delegate handles all application buttons and forms.
+document.addEventListener('click', async event => {
+  const node = event.target.closest('[data-action]');
+  if (!node || !actions[node.dataset.action]) return;
+  if (node.tagName === 'A' && (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)) return;
+  event.preventDefault();
+  if (node.disabled) return;
+  const isButton = node.tagName === 'BUTTON'; if (isButton) busy(node, true);
+  try { await actions[node.dataset.action](node); }
+  catch (error) { notify(error.message, true); }
+  finally { if (isButton) busy(node, false); }
+});
+document.addEventListener('submit', async event => {
+  const form = event.target;
+  if (!submitters[form.id]) return;
+  event.preventDefault(); const button = event.submitter || form.querySelector('[type="submit"]');
+  const buttons = [...form.querySelectorAll('[type="submit"]')]; if (buttons.some(node => node.disabled)) return;
+  buttons.forEach(node => busy(node, true));
+  if (form.querySelector('.form-error')) form.querySelector('.form-error').textContent = '';
+  try { await submitters[form.id](form, button); }
+  catch (error) { errorBox(form, error); }
+  finally { buttons.forEach(node => busy(node, false)); }
+});
+document.addEventListener('input', event => {
+  const form = event.target.closest('form');
+  if (form && !['search-form', 'test-form', 'login-form', 'reauth-form', 'audit-form'].includes(form.id)) {
+    state.dirtyForms.add(form.id); if (form.closest('#dialog')) state.dialogDirty = true;
   }
-  function replayLocation() {
-    if (!state.user || location.hash === '#main') return;
-    const page = workspacePage();
-    if (currentArea() !== state.area || page !== state.page || location.hash !== `#${page}`) navigate(page, { replace: true });
+  if (form?.id === 'search-form') captureSearchDraft();
+  if (event.target.name === 'filter-query') updateFilter(event.target);
+});
+function updateFilter(input) {
+  state.filters[state.page] ||= { query: '', status: 'all', sort: 'name' };
+  state.filters[state.page][{ 'filter-query': 'query', 'filter-status': 'status', 'filter-sort': 'sort' }[input.name]] = input.value;
+  const render = { providers: providerTable, keys: keyTable, users: userTable }[state.page]; if (render) setContent(get('#table-results'), render(state));
+}
+document.addEventListener('change', async event => {
+  const input = event.target;
+  try {
+    if (input.id === 'provider-type') updateProviderFields(state, Boolean(state.editor), true);
+    if (['filter-status', 'filter-sort'].includes(input.name)) updateFilter(input);
+    if (input.name === 'metrics-window') { state.window = input.value; await refresh({ local: false }); }
+    if (input.name === 'theme') { state.theme = input.value; localStorage.setItem('bensz-search-theme', state.theme); applyTheme(); }
+  } catch (error) { notify(error.message, true); }
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Tab' && state.menuOpen) {
+    const nodes = [...get('.sidebar').querySelectorAll('a,button')].filter(node => node.getClientRects().length);
+    if (event.shiftKey && document.activeElement === nodes[0]) { event.preventDefault(); nodes.at(-1).focus(); }
+    if (!event.shiftKey && document.activeElement === nodes.at(-1)) { event.preventDefault(); nodes[0].focus(); }
   }
-  window.addEventListener('popstate', replayLocation);
-  window.addEventListener('hashchange', replayLocation);
-  function status(enabled) { return `<span class="tag ${enabled ? 'good' : ''}"><span class="dot"></span>${enabled ? '已启用' : '已停用'}</span>`; }
-  function providerRows(providers, editable = false) {
-    return providers.map(provider => `<tr><td><strong>${escape(provider.name)}</strong><div class="cell-sub">${escape(provider.provider)}</div></td><td>${status(provider.enabled)}</td>${adminArea() ? `<td><span>${escape(provider.api_base || '服务默认地址')}</span><div class="cell-sub">${provider.has_api_key ? '已配置密钥' : '未设置密钥'} · 超时 ${fmt(provider.timeout_ms)} ms</div></td>` : ''}${editable ? `<td><div class="actions"><button class="btn small" data-provider-edit="${escape(provider.name)}">编辑</button><button class="btn small" data-provider-test="${escape(provider.name)}">测试</button><button class="btn small" data-provider-toggle="${escape(provider.name)}">${provider.enabled ? '停用' : '启用'}</button><button class="btn small danger" data-provider-delete="${escape(provider.name)}">删除</button></div></td>` : ''}</tr>`).join('');
-  }
-  function renderOverview(main, data) {
-    const metrics = data.metrics || {}; const counters = metrics.counters || {}; const providers = data.providers || [];
-    const recent = [...(metrics.recent || [])].reverse().slice(0, 6);
-    main.innerHTML = `${head('overview', '<button class="btn" id="refresh">刷新数据 ↻</button>')}<div class="stats"><div class="stat"><div class="stat-label">启用的 Search API</div><div class="stat-value">${fmt(data.enabled_count)}</div><div class="stat-note">共配置 ${fmt(data.configured_count)} 个服务</div></div><div class="stat"><div class="stat-label">搜索请求</div><div class="stat-value">${fmt(counters.requests)}</div><div class="stat-note">当前服务进程累计</div></div><div class="stat"><div class="stat-label">回退调用</div><div class="stat-value">${fmt(counters.fallbacks)}</div><div class="stat-note">主服务失败后触发</div></div><div class="stat"><div class="stat-label">运行模式</div><div class="stat-value stat-mode">${escape(data.mode === 'production' ? '正式模式' : data.mode === 'mock' ? '模拟模式' : data.mode || '未知')}</div><div class="stat-note">${escape(data.version || '版本未提供')}</div></div></div>${data.mode === 'mock' ? '<div class="note warning">当前配置使用模拟结果。请连接真实 Search API 后再对外提供搜索服务。</div>' : ''}<div class="grid-two"><section class="panel"><div class="panel-head"><div><h2>搜索服务</h2><p>启用的服务参与智能搜索路由</p></div><button class="btn small" id="manage-provider">管理 API →</button></div>${providers.length ? `<div class="table-wrap"><table><thead><tr><th>服务名称</th><th>状态</th><th>连接配置</th></tr></thead><tbody>${providerRows(providers)}</tbody></table></div>` : empty('还没有搜索服务', '添加真实 Search API，开始第一次搜索。')}</section><section class="panel"><div class="panel-head"><h2>开始使用</h2></div><div class="panel-body"><ol class="steps"><li><strong>连接搜索来源</strong><br>配置服务地址和 API Key，测试连接。</li><li><strong>验证真实搜索</strong><br>使用调试台检查返回结果与路由状态。</li><li><strong>接入你的应用</strong><br>创建独立密钥，通过 POST /search 调用。</li></ol></div></section></div><section class="panel"><div class="panel-head"><div><h2>最近调用</h2><p>仅展示请求状态，不记录搜索词</p></div><span class="tag">进程内指标</span></div>${recent.length ? `<div class="table-wrap"><table><thead><tr><th>请求 ID</th><th>搜索意图</th><th>搜索服务</th><th>结果数</th><th>执行状态</th></tr></thead><tbody>${recent.map(item => `<tr><td class="cell-sub">${escape(item.request_id)}</td><td>${escape(item.intent)}</td><td>${escape((item.providers || []).join(' / '))}</td><td>${fmt(item.result_count)}</td><td>${escape((item.attempts || []).map(attempt => `${attempt.provider}: ${attempt.status}`).join(' · '))}</td></tr>`).join('')}</tbody></table></div>` : empty('暂无调用记录', '完成一次搜索后，这里会显示实际执行情况。')}</section><p class="section-foot">指标范围：当前服务进程。${metrics.persistent ? '已持久化。' : '服务重启后计数重置，不作为历史用量账单。'}</p>`;
-    document.getElementById('refresh').onclick = () => navigate('overview');
-    document.getElementById('manage-provider').onclick = () => navigate('providers');
-  }
-  function renderUserOverview(main, data, keys) {
-    const providers = (data.providers || []).filter(provider => provider.enabled);
-    const activeKeys = keys.filter(key => !key.revoked);
-    main.innerHTML = `${head('overview', '<button class="btn" id="refresh">刷新数据 ↻</button>')}
-      <section class="personal-welcome"><div><p class="eyebrow">YOUR NEXT SEARCH</p><h2>你好，${escape(state.user.username)}。</h2><p>从一个问题开始，让搜索来源为你带来答案。</p></div><div class="personal-actions"><button class="btn primary" id="workbench-search">${icon('search')} 开始搜索</button><button class="btn" id="workbench-keys">${icon('keys')} 我的密钥</button></div></section>
-      <div class="stats personal-stats"><div class="stat"><div class="stat-label">可用搜索来源</div><div class="stat-value">${fmt(providers.length)}</div><div class="stat-note">当前已启用的来源</div></div><div class="stat"><div class="stat-label">我的有效密钥</div><div class="stat-value">${fmt(activeKeys.length)}</div><div class="stat-note">仅统计属于你的访问密钥</div></div></div>
-      <div class="grid-two"><section class="panel"><div class="panel-head"><div><h2>可用搜索来源</h2><p>自动路由会根据查询选择来源</p></div><button class="btn small" id="manage-provider">开始搜索 →</button></div>${providers.length ? `<div class="table-wrap"><table><thead><tr><th>来源名称</th><th>类型</th></tr></thead><tbody>${providers.map(provider => `<tr><td><strong>${escape(provider.name)}</strong></td><td>${escape(provider.provider)}</td></tr>`).join('')}</tbody></table></div>` : empty('暂时没有可用来源', '请联系管理员启用搜索服务。')}</section><section class="panel"><div class="panel-head"><h2>接入你的应用</h2><button class="btn small" id="workbench-integration">接入指南 →</button></div><div class="panel-body"><ol class="steps"><li><strong>验证一次搜索</strong><br>输入问题，检查返回的结果与来源。</li><li><strong>创建自己的访问密钥</strong><br>为不同应用创建独立密钥，方便管理。</li><li><strong>调用统一搜索接口</strong><br>参考接入指南，通过 POST /search 调用。</li></ol></div></section></div>`;
-    document.getElementById('refresh').onclick = () => navigate('overview');
-    document.getElementById('workbench-search').onclick = () => navigate('search');
-    document.getElementById('manage-provider').onclick = () => navigate('search');
-    document.getElementById('workbench-keys').onclick = () => navigate('keys');
-    document.getElementById('workbench-integration').onclick = () => navigate('integration');
-  }
-  function renderProviders(main) {
-    main.innerHTML = `${head('providers', '<button class="btn primary" id="add-provider">＋ 添加 Search API</button>')}<section class="panel"><div class="panel-head"><div><h2>已配置服务</h2><p>修改后立即用于新搜索请求；编辑时密钥留空可保留原密钥。</p></div><span class="tag">${state.providers.length} 个服务</span></div>${state.providers.length ? `<div class="table-wrap"><table><thead><tr><th>服务名称</th><th>状态</th><th>连接配置</th><th>操作</th></tr></thead><tbody>${providerRows(state.providers, true)}</tbody></table></div>` : empty('添加你的第一个 Search API', '选择搜索服务、填入连接配置，并测试真实搜索。')}</section><div class="note">API Key 保存在服务器中，后台只展示配置状态。启用多个来源后，自动路由根据查询和约束选择服务。</div>`;
-    document.getElementById('add-provider').onclick = () => providerDialog();
-    document.querySelectorAll('[data-provider-edit]').forEach(button => button.onclick = () => providerDialog(state.providers.find(item => item.name === button.dataset.providerEdit)));
-    document.querySelectorAll('[data-provider-test]').forEach(button => button.onclick = () => testDialog(button.dataset.providerTest));
-    document.querySelectorAll('[data-provider-toggle]').forEach(button => button.onclick = async () => {
-      const provider = state.providers.find(item => item.name === button.dataset.providerToggle); busy(button, true);
-      try { await api(`/providers/${encodeURIComponent(provider.name)}`, 'PUT', { name: provider.name, provider: provider.provider, enabled: !provider.enabled, api_key: '', api_base: provider.api_base || '', engines: provider.engines || [], search_model: provider.search_model || 'gpt-4.1-mini', search_context_size: provider.search_context_size || 'medium', max_output_tokens: provider.max_output_tokens || 2048, source_family: provider.source_family, estimated_cost_usd: provider.estimated_cost_usd, timeout_ms: provider.timeout_ms }); notify('服务状态已更新'); navigate('providers'); }
-      catch (error) { notify(error.message, true); busy(button, false); }
-    });
-    document.querySelectorAll('[data-provider-delete]').forEach(button => button.onclick = () => confirmDialog('删除搜索服务', `确认删除「${button.dataset.providerDelete}」？删除后该服务将不再参与路由。`, async () => { await api(`/providers/${encodeURIComponent(button.dataset.providerDelete)}`, 'DELETE'); navigate('providers'); notify('搜索服务已删除'); }));
-  }
-  function openDialog(title, body) { dialog.innerHTML = `<div class="dialog-head"><h2 id="dialog-title">${escape(title)}</h2><button class="dialog-close" aria-label="关闭对话框" type="button">×</button></div><div class="dialog-body">${body}</div>`; dialog.querySelector('.dialog-close').onclick = () => dialog.close(); if (!dialog.open) dialog.showModal(); }
-  function confirmDialog(title, description, action) {
-    openDialog(title, `<form id="confirm-form"><p>${escape(description)}</p><div class="form-error" role="alert"></div><div class="form-actions"><button class="btn" type="button" id="cancel">取消</button><button class="btn danger" type="submit">确认${title.slice(0, 2)}</button></div></form>`);
-    document.getElementById('cancel').onclick = () => dialog.close();
-    document.getElementById('confirm-form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; busy(form.querySelector('[type=submit]'), true); try { await action(); dialog.close(); } catch (error) { errorBox(form, error); busy(form.querySelector('[type=submit]'), false); } };
-  }
-  function providerDialog(provider) {
-    const editing = Boolean(provider);
-    openDialog(editing ? '编辑 Search API' : '添加 Search API', `<form id="provider-form"><div class="form-error" role="alert"></div><div class="form-row"><div class="field"><label for="provider-name">服务名称</label><input id="provider-name" name="name" required pattern="(?:[a-zA-Z0-9_]|-)+" maxlength="64" value="${escape(provider?.name || '')}" ${editing ? 'disabled' : ''} placeholder="如 searxng-local"><small>使用字母、数字、短横线或下划线。</small></div><div class="field"><label for="provider-type">服务类型</label><select id="provider-type" name="provider" required>${state.catalog.map(item => `<option value="${escape(item.provider)}" ${item.provider === provider?.provider ? 'selected' : ''}>${escape(item.label || item.provider)}</option>`).join('')}</select></div></div><div class="field"><label for="provider-base">API 服务地址</label><input id="provider-base" name="api_base" type="url" value="${escape(provider?.api_base || '')}" placeholder="https://…"><small id="base-hint">留空使用该服务的默认地址。</small></div><div class="field"><label for="provider-key">API Key ${editing && provider.has_api_key ? '（已配置）' : ''}</label><input id="provider-key" name="api_key" type="password" autocomplete="off" placeholder="${editing ? '留空保留原密钥' : '输入服务提供商的 API Key'}"><small id="key-hint"></small></div><div class="form-row"><div class="field"><label for="provider-engines">搜索引擎（可选）</label><input id="provider-engines" name="engines" value="${escape((provider?.engines || []).join(', '))}" placeholder="bing, duckduckgo"><small>仅适用于 SearXNG；多个引擎用逗号分隔，留空使用实例默认。实例中也需启用对应引擎。</small><button class="btn" type="button" id="provider-common-engines" hidden>填入常用引擎</button></div><div class="field"><label for="provider-timeout">超时时间（ms）</label><input id="provider-timeout" name="timeout_ms" type="number" required min="100" max="60000" step="100" value="${provider?.timeout_ms || 8000}"><small>范围 100–60000 毫秒。</small></div></div><div id="openai-options" hidden><div class="field"><label for="provider-model">OpenAI 搜索模型</label><input id="provider-model" name="search_model" maxlength="128" value="${escape(provider?.search_model || 'gpt-4.1-mini')}" placeholder="gpt-4.1-mini"><small>填写支持 Responses web_search 的模型；实际可用性通过连接测试确认。</small></div><div class="form-row"><div class="field"><label for="provider-context">搜索上下文</label><select id="provider-context" name="search_context_size">${[['low', '较少'], ['medium', '适中'], ['high', '较多']].map(([value, label]) => `<option value="${value}" ${value === (provider?.search_context_size || 'medium') ? 'selected' : ''}>${label}</option>`).join('')}</select><small>控制搜索内容量，不保证来源数量。</small></div><div class="field"><label for="provider-output">输出 token 上限</label><input id="provider-output" name="max_output_tokens" type="number" min="128" max="8192" value="${provider?.max_output_tokens || 2048}"><small>OpenAI 会收取搜索及模型费用，结果可能少于请求数量。</small></div></div></div><div id="bensz-options" hidden><div class="field"><label for="provider-cost">每次查询的下游费用估算（USD）</label><input id="provider-cost" name="estimated_cost_usd" type="number" min="0" max="10" step="0.001" value="${provider?.estimated_cost_usd ?? 0.02}"><small>为远端实例的整条搜索子树预留预算；这是配置估算，不代表真实账单。</small></div></div><label class="checkbox"><input name="enabled" type="checkbox" ${provider?.enabled !== false ? 'checked' : ''}>启用服务，参与搜索路由</label><div class="form-actions"><button type="button" class="btn" id="provider-cancel">取消</button><button class="btn primary" type="submit">保存配置</button></div></form>`);
-    const select = document.getElementById('provider-type');
-    const updateHints = () => { const item = state.catalog.find(entry => entry.provider === select.value); document.getElementById('provider-base').placeholder = item?.default_api_base || 'https://your-search-service'; document.getElementById('provider-base').required = ['searxng', 'bensz_search'].includes(select.value); document.getElementById('base-hint').textContent = select.value === 'bensz_search' ? '填写远端实例根地址（可含部署前缀），不要附加 /search 或 /bensz-search/v1。' : '留空使用该服务的默认地址。'; document.getElementById('key-hint').textContent = select.value === 'bensz_search' ? '填写远端 bensz-search 的访问密钥；远端实例需支持联邦搜索。' : item?.requires_api_key ? '该服务需要 API Key。密钥不会在列表中显示。' : '该服务通常不需要密钥，可按实际配置填写。'; const engines = document.getElementById('provider-engines'); engines.disabled = select.value !== 'searxng'; document.getElementById('provider-common-engines').hidden = engines.disabled; engines.placeholder = (item?.default_engines || []).join(', '); const federated = select.value === 'bensz_search'; document.getElementById('bensz-options').hidden = !federated; const cost = document.getElementById('provider-cost'); cost.disabled = !federated; cost.required = federated; const openai = select.value === 'openai'; document.getElementById('openai-options').hidden = !openai; document.querySelectorAll('#openai-options input, #openai-options select').forEach(field => { field.disabled = !openai; field.required = openai; }); };
-    select.onchange = () => { updateHints(); if (!editing) document.getElementById('provider-timeout').value = select.value === 'openai' ? 30000 : select.value === 'bensz_search' ? 15000 : 8000; }; updateHints(); if (!editing && select.value === 'openai') document.getElementById('provider-timeout').value = 30000;
-    document.getElementById('provider-common-engines').onclick = () => { const item = state.catalog.find(entry => entry.provider === 'searxng'); document.getElementById('provider-engines').value = (item?.default_engines || []).join(', '); };
-    document.getElementById('provider-cancel').onclick = () => dialog.close();
-    document.getElementById('provider-form').onsubmit = async event => {
-      event.preventDefault(); const form = event.currentTarget; const fields = new FormData(form); const button = form.querySelector('[type=submit]');
-      const payload = { name: editing ? provider.name : fields.get('name'), provider: fields.get('provider'), api_base: fields.get('api_base') || '', api_key: fields.get('api_key') || '', engines: String(fields.get('engines') || '').split(',').map(value => value.trim()).filter(Boolean), timeout_ms: Number(fields.get('timeout_ms')), enabled: fields.has('enabled') };
-      if (payload.provider === 'bensz_search') payload.estimated_cost_usd = Number(fields.get('estimated_cost_usd'));
-      if (payload.provider === 'openai') { payload.search_model = fields.get('search_model'); payload.search_context_size = fields.get('search_context_size'); payload.max_output_tokens = Number(fields.get('max_output_tokens')); }
-      busy(button, true); try { await api(editing ? `/providers/${encodeURIComponent(provider.name)}` : '/providers', editing ? 'PUT' : 'POST', payload); dialog.close(); notify('Search API 配置已保存'); navigate('providers'); } catch (error) { errorBox(form, error); busy(button, false); }
-    };
-  }
-  function testDialog(name) {
-    openDialog(`测试 ${name}`, `<form id="test-form"><p class="muted">发送真实查询，验证配置与搜索结果。</p><div class="field"><label for="test-query">测试查询</label><input id="test-query" name="query" value="Python official documentation" required maxlength="10000"></div><div class="form-error" role="alert"></div><button class="btn primary" type="submit">运行测试</button><div id="test-results" class="test-results" aria-live="polite"></div></form>`);
-    document.getElementById('test-form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('[type=submit]'); busy(button, true); form.querySelector('.form-error').textContent = ''; document.getElementById('test-results').textContent = '正在请求真实搜索服务…'; try { const data = await api(`/providers/${encodeURIComponent(name)}/test`, 'POST', { query: new FormData(form).get('query') }); document.getElementById('test-results').innerHTML = `<div class="note ${data.ok ? '' : 'warning'}">${data.ok ? '连接成功' : '测试失败'} · ${fmt(data.result_count)} 条结果 · ${fmt(Math.round(data.latency_ms || 0))} ms${data.category ? ` · ${escape(data.category === 'quota' ? '服务额度不足，请检查余额或充值后重试（quota）' : data.category)}` : ''}</div>${resultsHtml(data.results || [])}`; requestAnimationFrame(updateSnippetControls); } catch (error) { document.getElementById('test-results').textContent = ''; errorBox(form, error); } finally { busy(button, false); } };
-  }
-  function resultUrl(value) { try { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) ? url.href : ''; } catch { return ''; } }
-  function resultsHtml(results) { return results.map((result, index) => { const url = resultUrl(result.url); const snippetId = `result-snippet-${++snippetSequence}`; return `<article class="result"><span class="result-url">${escape(result.url)}</span>${url ? `<a class="result-title" href="${escape(url)}" target="_blank" rel="noopener noreferrer">${index + 1}. ${escape(result.title || result.url)}</a>` : `<span class="result-title">${index + 1}. ${escape(result.title || '无标题')}</span>`}<p class="result-snippet" id="${snippetId}">${escape(result.snippet || result.content || result.description || '')}</p><button class="snippet-toggle" type="button" data-snippet-toggle="${snippetId}" aria-controls="${snippetId}" aria-expanded="false" hidden>展开摘要</button>${result.snippet_kind === 'generated_summary' ? '<span class="tag">AI 生成摘要</span>' : result.snippet_kind === 'source_only' ? '<span class="tag">来源链接</span>' : ''}${result.provider ? `<span class="tag">${escape(result.provider)}</span>` : ''}</article>`; }).join(''); }
-  function renderSearch(main) {
-    main.innerHTML = `${head('search')}<section class="panel"><div class="panel-body"><form id="search-form"><div class="search-bar"><div class="field"><label for="search-query">搜索内容</label><input id="search-query" name="query" required maxlength="10000" placeholder="输入你要搜索的问题或关键词…"></div><button class="btn primary" type="submit">${icon('search')} 执行搜索</button></div><div class="search-options"><div class="field"><label for="search-provider">搜索服务</label><select id="search-provider" name="search_tool_name"><option value="auto">自动智能路由</option>${state.providers.filter(provider => provider.enabled).map(provider => `<option value="${escape(provider.name)}">${escape(provider.name)}</option>`).join('')}</select></div><div class="field"><label for="search-intent">搜索意图</label><select id="search-intent" name="intent">${[['auto', '自动判断'], ['general', '通用搜索'], ['news', '新闻资讯'], ['academic', '学术研究'], ['deep', '深度搜索'], ['coding', '代码开发'], ['people', '人物信息']].map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select></div><div class="field"><label for="search-freshness">时效要求</label><select id="search-freshness" name="freshness">${[['auto', '自动'], ['any', '不限时间'], ['day', '最近一天'], ['week', '最近一周'], ['month', '最近一月'], ['year', '最近一年']].map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select></div><div class="field"><label for="search-count">结果数量</label><input id="search-count" name="max_results" type="number" min="1" max="20" value="10" required></div></div><div class="form-error" role="alert"></div></form></div></section><section class="panel"><div class="panel-head"><h2>搜索结果</h2><span class="results-meta" id="results-meta">等待查询</span></div><div class="panel-body" id="search-results" aria-live="polite">${empty('从一次真实搜索开始', '查询将通过服务器发送给已配置的 Search API。')}</div></section>`;
-    document.getElementById('search-form').onsubmit = async event => {
-      event.preventDefault(); const form = event.currentTarget; const fields = new FormData(form); const button = form.querySelector('[type=submit]'); const revision = state.revision; const started = performance.now();
-      busy(button, true); form.querySelector('.form-error').textContent = ''; document.getElementById('results-meta').textContent = '请求中…'; document.getElementById('search-results').innerHTML = '<p class="muted" role="status">正在查询搜索服务并整理结果…</p>';
-      try {
-        const data = await api('/search', 'POST', { query: fields.get('query'), search_tool_name: fields.get('search_tool_name'), profile: { intent: fields.get('intent') }, constraints: { freshness: fields.get('freshness') }, max_results: Number(fields.get('max_results')), debug: true });
-        if (revision !== state.revision) return;
-        document.getElementById('results-meta').textContent = `${fmt((data.results || []).length)} 条结果 · ${fmt(Math.round(performance.now() - started))} ms`;
-        document.getElementById('search-results').innerHTML = `${data.results?.length ? resultsHtml(data.results) : empty('没有找到结果', '请调整查询，或检查服务测试与执行状态。')}${data.debug ? `<details class="debug"><summary>查看路由与执行详情</summary><pre class="code">${escape(JSON.stringify(data.debug, null, 2))}</pre></details>` : ''}`;
-        requestAnimationFrame(updateSnippetControls);
-      } catch (error) { if (revision !== state.revision) return; errorBox(form, error); document.getElementById('results-meta').textContent = '请求失败'; document.getElementById('search-results').innerHTML = empty('搜索未完成', '检查服务连接与配置后重试。'); }
-      finally { busy(button, false); }
-    };
-  }
-  function renderKeys(main, data) {
-    const keys = data.keys || [];
-    main.innerHTML = `${head('keys', '<button class="btn primary" id="create-key">＋ 创建访问密钥</button>')}<div class="note">每个密钥只在创建时展示一次。请为不同应用创建独立密钥，撤销后立即停止接受该密钥。</div><section class="panel"><div class="panel-head"><h2>我的访问密钥</h2><span class="tag">${keys.filter(key => !key.revoked).length} 个有效密钥</span></div>${keys.length ? `<div class="table-wrap"><table><thead><tr><th>名称 / 密钥前缀</th><th>状态</th><th>创建时间</th><th>最后使用</th><th>操作</th></tr></thead><tbody>${keys.map(key => `<tr><td><strong>${escape(key.name)}</strong><div class="cell-sub">${escape(key.prefix)}…</div></td><td>${status(!key.revoked)}</td><td>${escape(date(key.created_at))}</td><td>${escape(date(key.last_used_at))}</td><td>${key.revoked ? '<span class="muted">已撤销</span>' : `<button class="btn small danger" data-key-revoke="${escape(key.id)}">撤销</button>`}</td></tr>`).join('')}</tbody></table></div>` : empty('还没有访问密钥', '创建密钥后，可通过统一 Search API 接入你的应用。')}</section>`;
-    document.getElementById('create-key').onclick = () => {
-      openDialog('创建访问密钥', '<form id="key-form"><div class="field"><label for="key-name">密钥名称</label><input id="key-name" name="name" required maxlength="100" placeholder="如 My Agent / 开发环境"></div><div class="form-error" role="alert"></div><div class="form-actions"><button class="btn primary" type="submit">创建密钥</button></div></form>');
-      document.getElementById('key-form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('button'); busy(button, true); try { const data = await api('/keys', 'POST', { name: new FormData(form).get('name') }); navigate('keys'); openDialog('请保存你的访问密钥', `<div class="note warning">完整密钥仅展示这一次。关闭后无法再次查看，请保存到安全位置。</div><div class="key-value" id="new-key">${escape(data.key)}</div><div class="form-actions"><button class="btn" id="copy-key">复制密钥</button><button class="btn primary" id="key-done">我已保存</button></div>`); document.getElementById('copy-key').onclick = () => copy(data.key); document.getElementById('key-done').onclick = () => dialog.close(); } catch (error) { errorBox(form, error); busy(button, false); } };
-    };
-    document.querySelectorAll('[data-key-revoke]').forEach(button => button.onclick = () => confirmDialog('撤销访问密钥', '撤销后，使用该密钥的应用将无法继续搜索。此操作无法恢复。', async () => { await api(`/keys/${encodeURIComponent(button.dataset.keyRevoke)}`, 'DELETE'); navigate('keys'); notify('访问密钥已撤销'); }));
-  }
-  function renderUsers(main, data) {
-    const users = data.users || [];
-    main.innerHTML = `${head('users', '<button class="btn primary" id="create-user">＋ 创建用户</button>')}<section class="panel"><div class="panel-head"><h2>后台账号</h2><span class="tag">${users.length} 个用户</span></div><div class="table-wrap"><table><thead><tr><th>用户名</th><th>角色</th><th>创建时间</th><th>操作</th></tr></thead><tbody>${users.map(user => `<tr><td><strong>${escape(user.username)}</strong>${user.id === state.user.id ? '<span class="tag current-account">当前账号</span>' : ''}</td><td>${user.role === 'admin' ? '管理员' : '成员'}</td><td>${escape(date(user.created_at))}</td><td>${user.id !== state.user.id ? `<button class="btn small danger" data-user-delete="${escape(user.id)}" data-username="${escape(user.username)}">删除</button>` : '<span class="muted">—</span>'}</td></tr>`).join('')}</tbody></table></div></section><div class="note">管理员可配置 Search API 和管理账号。成员可运行搜索、管理自己的访问密钥及修改个人密码。</div>`;
-    document.querySelectorAll('[data-user-delete]').forEach(button => button.onclick = () => confirmDialog('删除后台用户', `确认删除「${button.dataset.username}」？该用户的会话与访问密钥将一并失效。`, async () => { await api(`/users/${encodeURIComponent(button.dataset.userDelete)}`, 'DELETE'); navigate('users'); notify('用户已删除'); }));
-    document.getElementById('create-user').onclick = () => {
-      openDialog('创建后台用户', '<form id="user-form"><div class="field"><label for="new-username">用户名</label><input id="new-username" name="username" required maxlength="64" autocomplete="off" pattern="(?:[a-zA-Z0-9_.]|-)+"><small>使用字母、数字、下划线、点或短横线。</small></div><div class="field"><label for="new-password">初始密码</label><input id="new-password" name="password" type="password" required minlength="12" maxlength="256" autocomplete="new-password"><small>至少 12 个字符，请通过安全渠道提供给该用户。</small></div><div class="field"><label for="new-role">账号角色</label><select id="new-role" name="role"><option value="member">成员</option><option value="admin">管理员</option></select></div><div class="form-error" role="alert"></div><div class="form-actions"><button class="btn primary" type="submit">创建用户</button></div></form>');
-      document.getElementById('user-form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('button'); busy(button, true); try { await api('/users', 'POST', Object.fromEntries(new FormData(form))); dialog.close(); notify('后台用户已创建'); navigate('users'); } catch (error) { errorBox(form, error); busy(button, false); } };
-    };
-  }
-  function renderSettings(main) {
-    main.innerHTML = `${head('settings')}<div class="grid-two"><section class="panel"><div class="panel-head"><h2>修改登录密码</h2></div><div class="panel-body"><form id="password-form"><div class="field"><label for="current-password">当前密码</label><input id="current-password" name="current_password" type="password" autocomplete="current-password" required></div><div class="field"><label for="new-own-password">新密码</label><input id="new-own-password" name="new_password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required><small>至少 12 个字符，建议使用独立的随机密码。</small></div><div class="field"><label for="confirm-password">确认新密码</label><input id="confirm-password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required></div><div class="form-error" role="alert"></div><button class="btn primary" type="submit">更新密码</button><p class="section-foot password-note">更新密码后，当前登录会话失效，请重新登录。</p></form></div></section><section class="panel"><div class="panel-head"><h2>账号信息</h2></div><div class="panel-body"><div class="field"><label>用户名</label><p>${escape(state.user.username)}</p></div><div class="field"><label>角色</label><p>${admin() ? '管理员 · 可管理搜索服务与用户' : '成员 · 可搜索与管理个人密钥'}</p></div></div></section></div>`;
-    document.getElementById('password-form').onsubmit = async event => { event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('button'); if (document.getElementById('new-own-password').value !== document.getElementById('confirm-password').value) { errorBox(form, new Error('两次输入的新密码不一致')); return; } busy(button, true); try { await api('/password', 'POST', Object.fromEntries(new FormData(form))); state.user = null; state.csrf = ''; login(); notify('密码已更新，请使用新密码登录'); } catch (error) { errorBox(form, error); busy(button, false); } };
-  }
-  async function copy(value) { try { if (!navigator.clipboard) throw new Error(); await navigator.clipboard.writeText(value); notify('已复制到剪贴板'); } catch { notify('无法访问剪贴板，请选中文本手动复制', true); } }
-  function renderIntegration(main) {
-    const endpoint = `${location.origin}/search`;
-    const curl = `curl '${endpoint}' \\\n  -H 'Authorization: Bearer YOUR_API_KEY' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"query":"Python official documentation","search_tool_name":"auto","max_results":10}'`;
-    const python = `import os\nimport requests\n\nresponse = requests.post(\n    "${endpoint}",\n    headers={"Authorization": f"Bearer {os.environ['SEARCH_API_KEY']}"},\n    json={"query": "Python official documentation", "search_tool_name": "auto"},\n    timeout=65,\n)\nresponse.raise_for_status()\nfor result in response.json()["results"]:\n    print(result["title"], result["url"])`;
-    main.innerHTML = `${head('integration', '<button class="btn" id="integration-key">管理访问密钥 →</button>')}<div class="note">通过 POST 调用搜索接口，并在 Authorization 请求头中提供你的访问密钥。浏览器地址栏不能直接发送搜索请求。</div><section class="panel"><div class="panel-head"><div><h2>cURL</h2><p>将 YOUR_API_KEY 替换为你创建的访问密钥</p></div><button class="btn small" id="copy-curl">复制示例</button></div><div class="panel-body"><pre class="code">${escape(curl)}</pre></div></section><section class="panel"><div class="panel-head"><h2>Python</h2><button class="btn small" id="copy-python">复制示例</button></div><div class="panel-body"><pre class="code">${escape(python)}</pre></div></section><section class="panel"><div class="panel-head"><h2>请求参数</h2><a class="btn small" href="/api/docs" target="_blank" rel="noopener noreferrer">完整 API 文档 ↗</a></div><div class="table-wrap"><table><thead><tr><th>参数</th><th>说明</th></tr></thead><tbody><tr><td>query</td><td>搜索关键词或自然语言问题，必填</td></tr><tr><td>search_tool_name</td><td>auto 自动路由，或指定已启用的服务名称</td></tr><tr><td>max_results</td><td>返回结果数量，1–20，默认 10</td></tr><tr><td>profile.intent</td><td>auto / general / news / academic / deep / coding / people</td></tr><tr><td>constraints</td><td>时效、成本、延迟与来源多样性等约束</td></tr><tr><td>debug</td><td>设为 true 返回路由与服务执行详情</td></tr></tbody></table></div></section>`;
-    document.getElementById('copy-curl').onclick = () => copy(curl); document.getElementById('copy-python').onclick = () => copy(python); document.getElementById('integration-key').onclick = () => navigate('keys');
-  }
-  async function initialize() { try { const data = await api('/session'); state.user = data.user; state.csrf = data.csrf_token; await enterWorkspace(); } catch { login(); } }
-  initialize();
-})();
+  if (event.key === 'Escape' && state.menuOpen) { event.preventDefault(); setMenu(false); get('[data-action="menu"]')?.focus(); } });
+window.addEventListener('resize', () => { if (innerWidth > 720 && state.menuOpen) setMenu(false); });
+window.addEventListener('beforeunload', event => { if (hasUnsaved() || state.secret) { event.preventDefault(); event.returnValue = ''; } });
+function restoreLocation() { if (state.currentURL) history.replaceState(null, '', state.currentURL); }
+function replayLocation() {
+  if (!state.user || ['#main', '#login-form', '#search-capabilities'].includes(location.hash)) return;
+  if (state.currentURL === `${location.pathname}${location.hash}`) return;
+  const route = locationState(); navigate(route.page, { area: route.area, params: route.params, replace: true });
+}
+window.addEventListener('popstate', replayLocation);
+window.addEventListener('hashchange', replayLocation);
+document.querySelector('.skip-link').addEventListener('click', event => { const main = get('#main'); if (main) { event.preventDefault(); main.focus(); main.scrollIntoView({ block: 'start' }); } });
+setInterval(() => {
+  if (!state.user || !state.expiresAt || state.expiryWarned) return;
+  if (state.expiresAt * 1000 - Date.now() < 300000) { state.expiryWarned = true; notify(t("copy.f15d0b371a")); }
+}, 30000);
+async function initialize() {
+  try { rememberSession(await api('/session', 'GET', undefined, false)); await enterWorkspace(); }
+  catch { login(); }
+}
+initialize();

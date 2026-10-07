@@ -1,10 +1,10 @@
 # 服务器部署
 
-当前镜像与上线验证见 [v1.0.3 发布验收](releases/v1.0.3.md)；下文保留原迁移与修复阶段的历史证据。
+当前镜像与上线验证见 [v1.0.5 发布验收](releases/v1.0.5.md)；下文保留原迁移与修复阶段的历史证据。
 
 ## Compose 与访问方式
 
-服务器工作目录为 `/docker/bensz-search`，使用 [docker-compose.yml](docker-compose.yml)。默认镜像为 `huangwb8/bensz-search:latest`，当前发布版本为 `1.0.3`（仅 `linux/amd64`），可在 `.env` 用 `BENSZ_SEARCH_IMAGE` 选择镜像；搜索容器名为 `bensz-search`，独立 SearXNG 容器名为 `bensz-search-searxng`。
+服务器工作目录为 `/docker/bensz-search`，使用 [docker-compose.yml](docker-compose.yml)。默认镜像为 `huangwb8/bensz-search:latest`，当前发布版本为 `1.0.5`（仅 `linux/amd64`），可在 `.env` 用 `BENSZ_SEARCH_IMAGE` 选择镜像；搜索容器名为 `bensz-search`，独立 SearXNG 容器名为 `bensz-search-searxng`。
 
 两项服务分别 `expose` 8000 和 8080，不发布宿主机端口。两个容器均只连接已有的外部网络 `npm_default`，不创建项目默认网络。反向代理上游填写 `http://bensz-search:8000`；搜索服务访问 `http://bensz-search-searxng:8080`。
 
@@ -48,11 +48,13 @@ Compose 显式设置 SearXNG 地址；同时更新 `.env` 保持一致。已有�
 
 原 Compose 从工作目录移入私有备份，避免同时留下默认候选配置；原命名卷保留供恢复。恢复时停止新搜索容器，恢复原 Compose 和匹配的环境文件，再启动原服务与原卷。迁移后的新写入需要另行备份，旧卷只代表迁移前状态。日常维护不执行 `down -v`。
 
+1.0.5 新增 SQLite 表与列，保留旧账号、会话、密钥和加密凭据。升级前使用 SQLite backup 或停机复制备份每个数据库，并检查副本完整性；回退到旧代码必须恢复升级前的数据库和匹配配置，不能直接复用迁移后的库。具体升级证据见 [v1.0.5 发布记录](releases/v1.0.5.md)。
+
 更新搜索服务（发布前在本目录私有备份中保留旧镜像 ID、Compose 和 `.env`；命令只更新 `search`，已有 SearXNG 服务保持运行）：
 
 ```bash
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.3 docker compose -f docker-compose.yml pull search
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.3 docker compose -f docker-compose.yml up -d --no-deps --wait search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.5 docker compose -f docker-compose.yml pull search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.5 docker compose -f docker-compose.yml up -d --no-deps --wait search
 ```
 
 使用服务器本地构建的修复镜像时，改用 `docker compose -f docker-compose.yml up -d --pull never --wait`，不执行 `pull`。待注册表镜像包含相应修复并验证后，再调整 `BENSZ_SEARCH_IMAGE`。

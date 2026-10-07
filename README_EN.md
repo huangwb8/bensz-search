@@ -7,7 +7,7 @@
 
 A standalone extension on LiteLLM 1.103.2 with no upstream source changes. Administrators configure and test providers and manage users; members search and create application keys in a personal workspace. Automatic search selects providers from task requirements and constraints, with timeouts, fallback, deduplication and weighted RRF fusion. External AI hosts can discover capabilities and submit individual engine queries.
 
-Current release: `v1.0.4`. The official image is [`huangwb8/bensz-search:1.0.4`](https://hub.docker.com/r/huangwb8/bensz-search), available for `linux/amd64` only, with a matching `latest` tag. Operators must configure usable providers; commercial services require their own API Key.
+Current release: `v1.0.5`. The official image is [`huangwb8/bensz-search:1.0.5`](https://hub.docker.com/r/huangwb8/bensz-search), available for `linux/amd64` only, with a matching `latest` tag. Operators must configure usable providers; commercial services require their own API Key.
 
 `v1.0.4` adds native bensz-search providers: compose remote instances recursively with cycle detection, bounded calls and deadlines, and leaf-source deduplication. Configure the remote base URL and an independent application key in Search API. All participating instances must support federation. See [configuration and limits](docs/smart-search-router/federated-search.md).
 
@@ -29,10 +29,12 @@ The default SearXNG URL is `http://host.docker.internal:8080`; run a real instan
 
 | Workspace | Entry | Features |
 |---|---|---|
-| Administrator console | `/admin` | Global overview, Search API configuration and live tests, users, search and personal keys |
+| Administrator console | `/admin` | Global overview, Search API configuration and live tests, users, all users’ keys, audit logs and search |
 | Personal workspace | `/app` | Available providers and personal key overview, search, integration and account settings |
 
-Administrators see vertically arranged, independently collapsible administrator/member navigation sections; members see only their personal section. Pages support refresh and browser history, the top bar shows the running version, and mobile navigation remains available. The server enforces roles and key ownership.
+Administrators see vertically arranged, independently collapsible administrator/member navigation sections; members see only their personal section. Pages support refresh and browser history, the brand area shows the running version, and mobile navigation remains available. The server enforces roles and key ownership.
+
+**v1.0.5** adds console governance and operational metrics. The overview supports process metrics and the last 7/30 UTC calendar days. Latency percentiles use histogram bucket upper bounds, and costs are estimates rather than provider bills. See the [console guide](docs/smart-search-router/commercial-admin.md) for user lifecycle, expiring/scoped keys, sessions and configuration import/export.
 
 Supports **OpenAI Web Search, Exa, Brave, Tavily, Serper, Perplexity, SearXNG and bensz-search**, including multiple instances per provider type. Saved settings apply to new requests immediately. Leaving an API Key blank preserves it for the same provider type; changing type does not inherit credentials. Environment configuration is imported only when the database is initialized. See the [search setup guide](docs/search-api-setup.md).
 
@@ -40,7 +42,7 @@ OpenAI uses Responses `web_search`, defaults to `gpt-4.1-mini`, and labels gener
 
 ## Search and AI integration
 
-Create an application key in the console and inject it as `BENSZ_SEARCH_API_KEY`. Its full value is shown once; revocation is immediate. Application keys and login passwords are separate.
+Create an application key in the console and inject it as `BENSZ_SEARCH_API_KEY`. Its full value is shown once; revocation is immediate. Keys support optional `search` and `protocol` scopes; both are enabled by default. Expired/revoked keys and disabled users are rejected immediately. Application keys and login passwords are separate.
 
 ```bash
 curl --noproxy '*' http://127.0.0.1:8898/search \
@@ -71,18 +73,20 @@ The host manages model tool loops; the service manages authentication, budgets, 
 
 ## Deployment and maintenance
 
-Local SQLite storage uses the `search-data` named volume; server deployments use project-local bind mounts. Users, sessions, application keys and encrypted provider settings persist. Metrics, circuit breakers and request history reset on restart. Back up the database with its matching `BENSZ_SEARCH_SECRET`; do not regenerate the encryption key.
+Local SQLite storage uses the `search-data` named volume; server deployments use project-local bind mounts. Users, sessions, application keys and encrypted provider settings persist. Audit logs, key call counts and daily usage also persist. Process health, circuit breakers and recent request history reset on restart. Back up the database with its matching `BENSZ_SEARCH_SECRET`; do not regenerate the encryption key.
 
 ```bash
 docker compose -f docs/deploy/compose.yaml up -d --build --wait
 docker compose -f docs/deploy/compose.yaml ps
 ```
 
-For server upgrades, back up the previous image ID, Compose file and private settings in `/docker/bensz-search`, then update only the search service:
+Version 1.0.5 applies incremental database migrations automatically. Rolling back to an older image also requires restoring the pre-upgrade database snapshot. See the [v1.0.5 release verification](docs/deploy/releases/v1.0.5.md).
+
+For server upgrades, back up the previous image ID, Compose file, private settings and SQLite databases in `/docker/bensz-search`, then update only the search service:
 
 ```bash
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.4 docker compose -f docker-compose.yml pull search
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.4 docker compose -f docker-compose.yml up -d --no-deps --wait search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.5 docker compose -f docker-compose.yml pull search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.5 docker compose -f docker-compose.yml up -d --no-deps --wait search
 ```
 
 Containers run as non-root with memory, concurrency, PID and log limits. Deployment is currently a single process on one host; shared multi-instance state is unverified. Do not use `down -v` for routine restarts. HTTPS hosting requires Secure Cookie settings and forwarded-header trust restricted to actual proxy IPs. See [local deployment](docs/deploy/README.md) and [server deployment](docs/deploy/server-deployment.md) for backups, recovery and proxy settings.
@@ -94,7 +98,7 @@ sh scripts/uv.sh sync --extra dev
 sh scripts/uv.sh run pytest -q
 sh scripts/uv.sh run ruff check src tests demo scripts docs/deploy
 sh scripts/uv.sh run ruff format --check src tests demo scripts docs/deploy
-node --check src/bensz_search/static/app.js
+for module in src/bensz_search/static/*.js; do node --check "$module"; done
 ```
 
 The wrapper keeps the Python environment and uv/pytest/Ruff caches in `.bensz-api/`; the versioned dependency lockfile is [`.bensz-api/uv.lock`](.bensz-api/uv.lock). Because uv requires a root lockfile, the wrapper creates a temporary symlink and removes it on exit. Use the commands above and run only one wrapper command at a time per project. The wrapper requires `python3` on macOS/Linux. `pyproject.toml` is the authoritative version. The 60-case [routing benchmark](tests/benchmarks/routing.json) accepts multiple reasonable providers. Tests cover API compatibility, permissions, fusion, fallback, persistence and workspace entries. See [deployment documentation](docs/deploy/README.md) for fixtures; mock results do not establish live supplier availability.
@@ -102,6 +106,7 @@ The wrapper keeps the Python environment and uv/pytest/Ruff caches in `.bensz-ap
 ## Documentation and limits
 
 - [Call-chain audit](docs/smart-search-router/architecture-audit.md): based on the LiteLLM 1.103.2 release package; its upstream Git commit was not obtained.
+- [Console guide and metric definitions](docs/smart-search-router/commercial-admin.md) / [Console verification](docs/smart-search-router/commercial-admin-verification.md)
 - [UI verification](docs/smart-search-router/series-ui-verification.md) / [Earlier live product verification](docs/smart-search-router/production-verification.md)
 - [Changelog](CHANGELOG.md) / [Collaboration rules](AGENTS.md) / [Contribution ledger](docs/contribution.bac)
 - Questions and feedback: [GitHub Issues](https://github.com/huangwb8/bensz-search/issues). Historical plans retain their original baselines; current capabilities follow source, protocol and verification evidence.

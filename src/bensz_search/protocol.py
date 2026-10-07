@@ -299,6 +299,7 @@ async def search(router, request, allowed, limits=None, context=None):
             for c in all_calls.values()
         ]
         return envelope
+    execution_started = time.monotonic()
     buckets, attempts, cost = await execute(
         router,
         calls,
@@ -352,6 +353,28 @@ async def search(router, request, allowed, limits=None, context=None):
                 "message": "Only declared calls were attempted; discover and replan missing coverage",
             }
         )
+    router.telemetry.record_execution(
+        envelope.request_id,
+        "protocol",
+        [
+            {
+                key: attempt[key]
+                for key in (
+                    "provider",
+                    "status",
+                    "fallback",
+                    "latency_ms",
+                    "result_count",
+                    "estimated_cost_usd",
+                )
+            }
+            for attempt in attempts
+        ],
+        len(envelope.results),
+        cost,
+        round((time.monotonic() - execution_started) * 1000, 2),
+        ["Caller supplied plan" if request.mode == "planned" else "Rule based protocol routing"],
+    )
     # No query or external content is copied into process-local metrics/logs.
     router.telemetry.counts["protocol:requests"] += 1
     router.telemetry.counts["protocol:" + envelope.status] += 1

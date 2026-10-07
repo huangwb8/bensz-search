@@ -16,6 +16,8 @@
 | `GET /bensz-search/v1/schema` | 公开 | 无实例配置或凭据的静态请求 Schema |
 | 原生四种 POST 搜索路径 | 原有鉴权 | 继续返回 LiteLLM 格式；不强制协议 envelope |
 
+1.0.5 起，受管理应用 Key 可限定 `search` / `protocol` 范围，旧 key 默认兼容两者。原生搜索与工具发现需要 `search`；v1 能力发现、查询与 MCP 需要 `protocol`。过期、撤销或账号停用立即拒绝新请求；范围不能替代 Key/team 对工具的权限过滤。治理与统计说明见[后台文档](../commercial-admin.md)。
+
 ## 能力与查询规则
 
 `tool_id` 是配置实例，`provider_type` 是 adapter，`engine_id` 是经过验证的可选择底层引擎。未公开底层引擎的聚合源只提供工具级调用。禁用或未授权工具不出现在发现结果中，执行再次按 Key/team 交集检查。应用 Key 不能访问后台、LiteLLM 管理接口；`/search/tools` 也进行相同权限过滤。

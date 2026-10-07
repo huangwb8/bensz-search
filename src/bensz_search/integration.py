@@ -1,17 +1,22 @@
 """The only version-sensitive adapter: retain LiteLLM HTTP, auth and provider execution."""
 
 import json
+import threading
+import time
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from uuid import uuid4
 
 from fastapi import HTTPException
 from litellm.integrations.custom_logger import CustomLogger
 from pydantic import ValidationError
 
+from .executor import failure_category
 from .federation import FederationMiddleware
 from .models import SearchRequest
 from .openai_search import provider_call
 from .router import SearchFailed, SmartRouter
+from .telemetry import usage_key
 
 
 @dataclass
@@ -24,6 +29,33 @@ class RequestContext:
 request_context: ContextVar[RequestContext | None] = ContextVar("bensz_search_request", default=None)
 
 
+class RouterLease:
+    """Retire only this router's callbacks after its in-flight calls finish."""
+
+    def __init__(self, router, call):
+        self.router, self.call = router, call
+        self.active = 0
+        self.retired = False
+        self.lock = threading.RLock()
+
+    async def __call__(self, **kwargs):
+        with self.lock:
+            self.active += 1
+        try:
+            return await self.call(**kwargs)
+        finally:
+            with self.lock:
+                self.active -= 1
+                if self.retired and not self.active:
+                    self.router.discard()
+
+    def retire(self):
+        with self.lock:
+            self.retired = True
+            if not self.active:
+                self.router.discard()
+
+
 class SearchInputMiddleware:
     """Set the default tool before native auth, and bind smart requests to this ASGI task."""
 
@@ -31,6 +63,13 @@ class SearchInputMiddleware:
         self.app, self.default_tool = FederationMiddleware(app), default_tool
 
     async def __call__(self, scope, receive, send):
+        token = usage_key.set(None)
+        try:
+            return await self.handle(scope, receive, send)
+        finally:
+            usage_key.reset(token)
+
+    async def handle(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         path = scope["path"]
@@ -267,12 +306,54 @@ def install(proxy, registry):
     if proxy.llm_router is None:
         raise RuntimeError("LiteLLM must configure at least one search tool")
     original = proxy.llm_router.asearch
-    physical = provider_call(proxy.llm_router, original)
+    physical = RouterLease(proxy.llm_router, provider_call(proxy.llm_router, original))
+    proxy.llm_router._bensz_lease = physical
     smart = SmartRouter(registry, physical)
 
     async def routed_search(**kwargs):
         if kwargs.get("search_tool_name", kwargs.get("model")) != "auto":
-            return await physical(**kwargs)
+            name = kwargs.get("search_tool_name", kwargs.get("model"))
+            # Preserve native named-provider semantics while observing the actual call.
+            started, request_id = time.monotonic(), str(uuid4())
+            attempt = {
+                "provider": name,
+                "status": "unavailable",
+                "fallback": False,
+                "latency_ms": 0,
+                "estimated_cost_usd": 0,
+                "result_count": 0,
+            }
+            capability = smart.registry.providers.get(name)
+            if capability:
+                attempt["estimated_cost_usd"] = capability.estimated_cost_usd * (
+                    len(kwargs.get("query")) if isinstance(kwargs.get("query"), list) else 1
+                )
+            try:
+                result = await physical(**kwargs)
+                attempt.update(
+                    status="success" if result.results else "empty", result_count=len(result.results)
+                )
+                if result.results:
+                    smart.health.success(name, (time.monotonic() - started) * 1000)
+                else:
+                    smart.health.failure(name, "empty")
+                return result
+            except Exception as error:
+                category = failure_category(error)
+                attempt["status"] = category
+                smart.health.failure(name, category)
+                raise
+            finally:
+                attempt["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
+                smart.telemetry.record_execution(
+                    request_id,
+                    "explicit",
+                    [attempt],
+                    attempt["result_count"],
+                    attempt["estimated_cost_usd"],
+                    attempt["latency_ms"],
+                    ["Explicit provider selection"],
+                )
         ctx = request_context.get()
         if ctx is None or not ctx.authorized:
             raise HTTPException(403, "Smart search requires the authenticated gateway context")
