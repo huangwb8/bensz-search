@@ -1,8 +1,8 @@
 # 本地产品部署与维护
 
-对应 bensz-search 1.0.3 / LiteLLM 1.103.2，部署范围为单机 Docker。本文描述本地部署；服务器及公网入口见[服务器部署说明](server-deployment.md)。
+对应 bensz-search 1.0.8 / LiteLLM 1.103.2，部署范围为单机 Docker。本文描述本地部署；服务器及公网入口见[服务器部署说明](server-deployment.md)。
 
-当前 amd64 发布产物和服务器验证见 [v1.0.3 发布验收](releases/v1.0.3.md)。
+当前 amd64 发布产物和服务器验证见 [v1.0.8 发布验收](releases/v1.0.8.md)。
 
 ## 部署文件与运行目录
 
@@ -15,7 +15,7 @@ Dockerfile、Compose 配置、部署脚本和环境变量示例统一位于本�
 - `compose.yaml`：默认真实服务；`compose.demo.yaml`：模拟测试；`compose.live.yaml`：独立 live demo。
 - `deploy_local.py`：生成私有配置并部署；`.env.example`：环境变量示例。
 
-单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:1.0.7 .`。
+单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:1.0.8 .`。
 
 ## 初始化与登录
 
@@ -69,7 +69,7 @@ docker compose -f docs/deploy/compose.yaml start search
 
 ## 版本与验证边界
 
-版本 1.0.5 唯一维护于 `pyproject.toml`；Docker Hub 镜像仅提供 `linux/amd64` 的 `1.0.5` 与 `latest`，本地源码构建标签为 1.0.5。镜像与服务器验收见 [v1.0.5 发布记录](releases/v1.0.5.md)。依赖由纳入版本控制的 `.bensz-api/uv.lock` 固定，upstream 未修改。Docker 构建上下文只放行该锁文件，继续排除 `.bensz-api/` 内的环境、缓存及任务材料；两个 Dockerfile 均通过 `scripts/uv.sh` 安装依赖。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
+版本 1.0.8 唯一维护于 `pyproject.toml`；Docker Hub 镜像仅提供 `linux/amd64` 的 `1.0.8` 与 `latest`，本地源码构建标签为 1.0.8。镜像与服务器验收见 [v1.0.8 发布记录](releases/v1.0.8.md)。依赖由纳入版本控制的 `.bensz-api/uv.lock` 固定，upstream 未修改。Docker 构建上下文只放行该锁文件，继续排除 `.bensz-api/` 内的环境、缓存及任务材料；两个 Dockerfile 均通过 `scripts/uv.sh` 安装依赖。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
 
 `/health/liveliness` 是进程检查；`/ready` 是配置检查；后台“测试”才验证外部检索。当前已通过的本机验收见 [production-verification.md](../smart-search-router/production-verification.md)。商业源无凭据时只验证配置链路，公网 TLS、多节点和原生 LiteLLM DB 模式未验收。
 

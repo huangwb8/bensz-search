@@ -5,6 +5,8 @@ import pytest
 from test_admin import console as console
 from test_admin import login
 
+from bensz_search import __version__
+
 
 @pytest.mark.parametrize("tag,newer", [("v99.0.0", True), ("v0.0.1", False)])
 def test_release_feed_is_public_cached_and_ordered(console, monkeypatch, tag, newer):
@@ -27,7 +29,7 @@ def test_release_feed_is_public_cached_and_ordered(console, monkeypatch, tag, ne
     assert len(calls) == 1
     notes = console.get(response.json()["changelog_url"])
     assert notes.status_code == 200
-    assert "1.0.5" in notes.text
+    assert f"# bensz-search {__version__}" in notes.text
 
 
 def test_release_feed_failure_keeps_console_available(console, monkeypatch):

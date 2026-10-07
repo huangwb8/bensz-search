@@ -2,7 +2,7 @@
 
 本记录对应 bensz-search 0.1.0 / LiteLLM 1.103.2，运行日期 2026-10-02。
 
-这是 0.1 历史记录。当前 8898 已升级为带后台的 0.2 真实搜索产品，GET `/search` 跳转到后台，fixture 容器已移除；当前证据见 [production-verification.md](production-verification.md)。下文端口、405 和镜像描述当时状态。
+这是 0.1 历史记录。0.2 阶段曾将本地 8898 升级为带后台的真实搜索产品，GET `/search` 跳转到后台，并移除 fixture 容器；该阶段证据见 [production-verification.md](production-verification.md)，当前镜像与上线证据见 [v1.0.8 发布验收](../deploy/releases/v1.0.8.md)。下文端口、405 和镜像描述当时状态。
 
 ## 实际部署
 

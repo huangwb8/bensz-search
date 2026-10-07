@@ -1,6 +1,6 @@
 # 用宿主 Responses 模型规划搜索，用 bensz-search 执行搜索
 
-> 本指南适用于当前 1.0.3；下文保留协议初次交付时的源码基线。此次界面与工作台更新未改变 Responses 工具契约，真实模型验证边界仍按兼容矩阵披露。
+> 本指南适用于当前 1.0.8；下文保留协议初次交付时的源码基线。后台更新未改变 Responses 工具契约；实例联邦搜索的新增来源字段见[实例组合说明](smart-search-router/federated-search.md)，真实模型验证边界仍按兼容矩阵披露。
 
 本教程面向已经使用 OpenAI Responses API 的 Chat 应用开发者，解释“宿主的 Responses 模型负责思考和规划，bensz-search 负责执行搜索”如何通过函数工具实现，并给出可以复用现有项目代码的接入示例。
 
