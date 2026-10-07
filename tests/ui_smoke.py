@@ -11,7 +11,7 @@ import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import sync_playwright
 
@@ -207,6 +207,7 @@ def run(args):
                     control["calls"].append(
                         {
                             "path": path,
+                            "query": parse_qs(urlsplit(request.url).query),
                             "method": method,
                             "body": request.post_data_json if request.post_data else None,
                         }
@@ -253,6 +254,15 @@ def run(args):
                     payload = {"key": "synthetic-key-not-a-credential"}
                 elif path == "/keys":
                     payload = {"keys": data["keys"]}
+                elif path.startswith("/keys/") and method == "DELETE":
+                    key_id = path.removeprefix("/keys/")
+                    if parse_qs(urlsplit(request.url).query).get("permanent") == ["true"]:
+                        data["keys"] = [key for key in data["keys"] if key["id"] != key_id]
+                    else:
+                        for key in data["keys"]:
+                            if key["id"] == key_id:
+                                key["revoked"] = True
+                    payload = {"ok": True}
                 elif path == "/users":
                     payload = {"users": data["users"]}
                 elif path == "/audit":
@@ -307,6 +317,26 @@ def run(args):
                 page.locator(".skeleton").wait_for(state="hidden")
                 assert page.locator("#app-version").inner_text() == "v1.0.5"
 
+            def delete_key(key_id, global_scope=False, page=page, control=control):
+                action = page.locator(f'[data-action="key-delete"][data-value="{key_id}"]')
+                action.locator("xpath=ancestor::details").locator("summary").click()
+                calls_before = len(control["calls"])
+                action.click()
+                assert "无法恢复" in page.locator("#dialog").inner_text()
+                page.locator('#confirm-form [data-action="dialog-close"]').click()
+                assert len(control["calls"]) == calls_before
+                assert action.count() == 1
+                action.click()
+                page.locator('#confirm-form button[type="submit"]').click()
+                page.locator("#dialog").wait_for(state="hidden")
+                action.wait_for(state="detached")
+                call = control["calls"][-1]
+                assert call["path"] == f"/keys/{key_id}" and call["method"] == "DELETE"
+                assert call["query"] == {
+                    "permanent": ["true"],
+                    **({"scope": ["all"]} if global_scope else {}),
+                }
+
             page.goto(base + "/admin/")
             page.locator("#login-form").wait_for()
             shot("login")
@@ -320,6 +350,27 @@ def run(args):
                 assert page.locator('[data-action="menu"]').is_hidden()
             assert page.locator("nav#nav-admin a").count() == 6
             assert page.locator("nav#nav-user a").count() == 6
+            if width <= 720:
+                page.locator('[data-action="menu"]').click()
+            assert page.locator('[data-action="nav-group"]').count() == 2
+            for area in ["admin", "user"]:
+                toggle = page.locator(f'[data-action="nav-group"][data-value="{area}"]')
+                title_x = toggle.evaluate(
+                    "node => node.getBoundingClientRect().x + parseFloat(getComputedStyle(node).paddingLeft)"
+                )
+                item_x = page.locator(f"#nav-{area} a > span").first.bounding_box()["x"]
+                assert item_x - title_x >= 16, (name, area, title_x, item_x)
+                toggle.focus()
+                page.keyboard.press("Enter")
+                assert toggle.get_attribute("aria-expanded") == "false"
+                assert page.locator(f"#nav-{area}").is_hidden()
+                assert page.locator(f"#nav-{'user' if area == 'admin' else 'admin'}").is_visible()
+                page.keyboard.press("Enter")
+                assert toggle.get_attribute("aria-expanded") == "true"
+                assert page.locator(f"#nav-{area}").is_visible()
+            shot("admin-navigation")
+            if width <= 720:
+                page.keyboard.press("Escape")
             shot("overview")
             for bad in ["constructor", "__proto__", "toString"]:
                 page.evaluate("bad => history.pushState(null, '', '/admin/#' + bad)", bad)
@@ -408,6 +459,10 @@ def run(args):
             assert dismissed
             page.remove_listener("dialog", dismiss_confirmation)
             page.locator('[data-action="key-done"]').click()
+            navigate("admin", "keys")
+            assert page.locator('[data-action="key-delete"]').count() == 2
+            assert page.locator('[data-action="key-revoke"][data-value="old-key"]').count() == 0
+            delete_key("key-fixture", global_scope=True)
             navigate("admin", "users")
             page.locator('[data-action="user-edit"][data-value="2"]').click()
             page.fill("#new-password", "a-synthetic-new-password")
@@ -470,6 +525,21 @@ def run(args):
                 page.evaluate("dispatchEvent(new PopStateEvent('popstate'))")
                 page.locator(".skeleton").wait_for(state="hidden")
                 assert page.locator('[data-testid="page-title"]').inner_text() == "我的工作台"
+            if width <= 720:
+                page.locator('[data-action="menu"]').click()
+            assert page.locator('[data-action="nav-group"]').count() == 0
+            assert page.locator("#nav-admin").count() == 0
+            assert page.locator("nav#nav-user a").count() == 6
+            nav_x = page.locator("#navigation").bounding_box()["x"]
+            link_x = page.locator("#nav-user a").first.bounding_box()["x"]
+            assert abs(link_x - nav_x) < 1, (name, nav_x, link_x)
+            assert page.locator('[data-testid="nav-user-overview"]').get_attribute("aria-current") == "page"
+            shot("member-navigation")
+            if width <= 720:
+                page.keyboard.press("Escape")
+            navigate("user", "keys")
+            delete_key("old-key")
+            assert page.locator('[data-action="key-delete"]').count() == 0
             report["viewports"].append(
                 {
                     "name": name,
@@ -489,10 +559,13 @@ def run(args):
                         "query constraints",
                         "search/test retention",
                         "one-time key guard",
+                        "active/revoked key deletion, cancellation, owner/admin scope and list refresh",
                         "XSS escaping",
                         "empty/error",
                         "theme",
                         "real sidebar navigation",
+                        "admin nested navigation and keyboard group toggles",
+                        "member flat navigation without group toggles",
                         "admin/member prototype route fallback",
                         "cancelled navigation restores URL",
                         "session refresh preserves password form",

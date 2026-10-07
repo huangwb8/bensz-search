@@ -3,13 +3,13 @@ import { html, field, check, formError, button, body, panel, badge, fmt, label, 
 export function providerForm(state, provider) {
   const editing = Boolean(provider);
   return html`<form id="provider-form" data-testid="provider-form">${formError()}
-    ${editing ? button(t('provider.copyLink'), 'provider-share', provider.name) : ''}<div class="form-row">
+    ${editing ? html`<div class="actions provider-utilities">${button(t('provider.copyLink'), 'provider-share', provider.name)}</div>` : ''}<div class="form-row">
     ${field('name', t("copy.5df7bfb4b7"), provider?.name || '', { id: 'provider-name', required: true, disabled: editing, maxlength: 64, pattern: '[a-zA-Z0-9_-]+', hint: t("copy.f937a797fc") })}
     ${field('provider', t("copy.7899b9e18c"), provider?.provider || state.catalog[0]?.provider, { id: 'provider-type', required: true, choices: state.catalog.map(p => [p.provider, p.label || p.provider]) })}</div>
     ${field('api_base', t("copy.34218e4108"), provider?.api_base || '', { id: 'provider-base', type: 'url', maxlength: 2048 })}
     ${field('api_key', `API Key${provider?.has_api_key ? t("copy.6e95d2e34d") : ''}`, '', { id: 'provider-key', type: 'password', maxlength: 4096, placeholder: editing ? t("copy.2326dd3ab5") : t("copy.4042186ae3") })}
     <div id="searxng-options">${field('engines', t("copy.2179355f08"), (provider?.engines || []).join(', '), { id: 'provider-engines', hint: t("copy.0273bae09f") })}
-      ${button(t("copy.fbfb7faeb3"), 'provider-common-engines')}
+      <div class="actions engine-utilities">${button(t("copy.fbfb7faeb3"), 'provider-common-engines')}</div>
       ${provider?.name ? html`<div class="note">${button(t("copy.d207f5cf9f"), 'provider-sync', provider.name)}<p>${t("copy.00097d89c4")}${(provider.verified_engines || []).join(', ') || t("copy.439e864e83")}</p>
         <p>${t("copy.8124cd7ac2")}${provider.engine_evidence || t("copy.d14675f943")}</p></div>` : ''}</div>
     ${field('timeout_ms', t("copy.7e43a2a1f9"), provider?.timeout_ms || 8000, { id: 'provider-timeout', type: 'number', required: true, min: 100, max: 60000, step: 100 })}
@@ -57,7 +57,7 @@ export function testForm(state, name) {
   const cache = state.tests[name];
   return html`<form id="test-form" data-provider="${name}" data-testid="provider-test"><p>${t("copy.90a3d113e9")}</p>
     ${field('query', t("copy.80996e730c"), cache?.query || 'Python official documentation', { id: 'test-query', maxlength: 1000, required: true })}${formError()}
-    <button class="btn primary" type="submit">${t("copy.ca02ccbd4e")}</button><div id="test-results" class="test-results" aria-live="polite">${cache ? testResults(cache.data) : ''}</div></form>`;
+    <div class="form-actions"><button class="btn primary" type="submit">${t("copy.ca02ccbd4e")}</button></div><div id="test-results" class="test-results" aria-live="polite">${cache ? testResults(cache.data) : ''}</div></form>`;
 }
 export function testResults(data) {
   return html`<div class="note ${data.ok ? '' : 'warning'}">${data.ok ? t("copy.4a19cb8a31") : t("copy.77c9e582e8")} · ${fmt(data.result_count)} ${t("copy.89ae1d3102")} ${fmt(data.latency_ms)} ms · ${label(data.category)}</div>
@@ -86,5 +86,5 @@ export function importForm() {
 export function reauthForm(state) {
   return html`<div class="dialog-head"><h2 id="reauth-title">${t("copy.1b18b001c2")}</h2></div><div class="dialog-body"><p>${t("copy.b124ea2341")}</p>
     <form id="reauth-form">${formError()}${field('username', t("account.username"), state.user.username, { id: 'reauth-username', required: true, disabled: true, autocomplete: 'username' })}
-    ${field('password', t("account.password"), '', { id: 'reauth-password', type: 'password', required: true, autocomplete: 'current-password' })}<button class="btn primary" type="submit">${t("copy.90528497a0")}</button></form></div>`;
+    ${field('password', t("account.password"), '', { id: 'reauth-password', type: 'password', required: true, autocomplete: 'current-password' })}<div class="form-actions"><button class="btn primary" type="submit">${t("copy.90528497a0")}</button></div></form></div>`;
 }

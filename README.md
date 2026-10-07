@@ -7,7 +7,7 @@
 
 基于 LiteLLM 1.103.2 的独立扩展，不修改 upstream 源码。管理员连接搜索源、测试服务并管理用户；成员在个人工作台搜索并创建应用访问密钥。自动搜索按任务和约束选择服务，处理超时、fallback、去重和 weighted RRF 融合。外部 AI 可先发现能力，再提交逐引擎查询计划。
 
-当前发布 `v1.0.5`；官方镜像为 [`huangwb8/bensz-search:1.0.5`](https://hub.docker.com/r/huangwb8/bensz-search)，仅 `linux/amd64`，同时提供 `latest`。首次部署需要配置可用搜索源；商业服务需要自己的 API Key。
+当前发布 `v1.0.7`；官方镜像为 [`huangwb8/bensz-search:1.0.7`](https://hub.docker.com/r/huangwb8/bensz-search)，仅 `linux/amd64`，同时提供 `latest`。首次部署需要配置可用搜索源；商业服务需要自己的 API Key。
 
 ## 快速开始
 
@@ -30,7 +30,9 @@ curl --noproxy '*' http://127.0.0.1:8898/ready
 | 管理员后台 | `/admin` | 全局概览、Search API 配置与真实测试、用户与全体密钥管理、审计和搜索 |
 | 用户工作台 | `/app` | 可用来源和个人密钥概览、搜索、接入指南、账号设置 |
 
-管理员侧栏上下排列“管理员 / 用户”两个独立折叠区；成员只看到用户区。页面支持刷新与浏览器前进后退，左上角产品名下方显示运行版本，移动端保持可用。角色和密钥归属由服务端校验。
+管理员侧栏保留“管理员 / 用户”两个可折叠分组，组内菜单缩进并以浅色层级线提示；成员直接显示平级个人菜单。页面支持刷新与浏览器前进后退，左上角产品名下方显示运行版本，移动端保持可用。角色和密钥归属由服务端校验。
+
+**v1.0.7** 新增访问密钥永久删除：用户可删除本人密钥，管理员可删除全体密钥，有效、已撤销与已过期状态均可删除，删除立即失效并保留历史审计。同步优化侧栏导航层级、表单控件高度、筛选条对齐与弹窗操作区；见[后台使用说明](docs/smart-search-router/commercial-admin.md)。
 
 **v1.0.5** 新增后台治理和运行观测。概览可切换本进程与近 7/30 个 UTC 日汇总；延迟分位是直方图区间上界估算，费用为配置估算。用户编辑、密钥期限与权限范围、会话管理和配置导入导出见[后台使用说明](docs/smart-search-router/commercial-admin.md)。
 
@@ -42,7 +44,7 @@ OpenAI 使用 Responses `web_search`，默认 `gpt-4.1-mini`，结果标注生�
 
 ## 调用搜索与 AI 接入
 
-在用户区“我的密钥”创建应用专属 key，注入 `BENSZ_SEARCH_API_KEY`。完整值只显示一次，撤销或过期立即拒绝新请求；可选 `search` / `protocol` 权限，默认兼容两者。停用用户同时拒绝其会话和独立 key；应用 key 与登录密码分离。
+在用户区“我的密钥”创建应用专属 key，注入 `BENSZ_SEARCH_API_KEY`。完整值只显示一次，撤销、删除或过期立即拒绝新请求；有效、已撤销和已过期密钥均可直接删除；可选 `search` / `protocol` 权限，默认兼容两者。停用用户同时拒绝其会话和独立 key；应用 key 与登录密码分离。
 
 ```bash
 curl --noproxy '*' http://127.0.0.1:8898/search \
@@ -80,13 +82,13 @@ docker compose -f docs/deploy/compose.yaml up -d --build --wait
 docker compose -f docs/deploy/compose.yaml ps
 ```
 
-1.0.5 会自动增量迁移数据库；回退旧镜像须同时恢复升级前的数据库快照。镜像与线上验收见 [v1.0.5 发布记录](docs/deploy/releases/v1.0.5.md)。
+1.0.5 起自动增量迁移数据库；回退旧镜像须同时恢复升级前的数据库快照。镜像与线上验收见 [v1.0.5 发布记录](docs/deploy/releases/v1.0.5.md)与 [v1.0.7 发布记录](docs/deploy/releases/v1.0.7.md)。
 
 服务器在 `/docker/bensz-search` 先备份旧镜像 ID、Compose、私有配置和 SQLite 数据库，再仅更新搜索服务：
 
 ```bash
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.5 docker compose -f docker-compose.yml pull search
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.5 docker compose -f docker-compose.yml up -d --no-deps --wait search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.7 docker compose -f docker-compose.yml pull search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.7 docker compose -f docker-compose.yml up -d --no-deps --wait search
 ```
 
 容器非 root，限制内存、并发、PID 和日志。当前单机单进程，未验收多实例状态共享。不要用 `down -v` 日常重启。HTTPS 部署启用 Secure Cookie，并只信任实际代理 IP 的转发头。备份、恢复和代理设置见[本地部署](docs/deploy/README.md)和[服务器部署](docs/deploy/server-deployment.md)。

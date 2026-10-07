@@ -35,13 +35,15 @@ export function loginView() {
     <footer class="home-footer"><span>${t("copy.fecec8e8ae")}</span><span>${t("copy.3c0b24a180")}</span></footer></div>`;
 }
 export function shell(state) {
-  const groups = state.user.role === 'admin' ? [['admin', t("copy.e19796712f"), adminPages], ['user', t("copy.0d0e1a86b3"), userPages]] : [['user', t("copy.0d0e1a86b3"), userPages]];
+  const isAdmin = state.user.role === 'admin';
+  const groups = isAdmin ? [['admin', t("copy.e19796712f"), adminPages], ['user', t("copy.0d0e1a86b3"), userPages]] : [['user', t("copy.0d0e1a86b3"), userPages]];
+  const navigation = ([area, title, pages]) => html`<nav class="workspace-nav-list" id="nav-${area}" aria-label="${title}${t("copy.88b7692bf5")}">${Object.entries(pages).map(([page, info]) => html`<a class="workspace-nav-link" href="${area === 'admin' ? '/admin/' : '/app/'}#${page}"
+    data-action="navigate" data-page="${page}" data-area="${area}" data-testid="nav-${area}-${page}"><span>${info[0]}</span><span class="nav-chevron" aria-hidden="true">›</span></a>`)}</nav>`;
   return html`<div class="layout"><button class="nav-backdrop" data-action="menu-close" aria-label="${t("copy.baf9f5c82a")}" hidden></button><aside class="sidebar">
     <div class="sidebar-header"><a class="brand" href="/" aria-label="${t("copy.b32942325e")}">${brand(true)}</a>${button(t("copy.4ce4cafdd0"), 'menu', '', 'menu-toggle')}</div>
-    <div class="nav" id="navigation">${groups.map(([area, title, pages]) => html`<section class="workspace-nav-group">
-      <button class="workspace-nav-group-toggle" data-action="nav-group" data-value="${area}" aria-expanded="true" aria-controls="nav-${area}">${title}<span aria-hidden="true">⌄</span></button>
-      <nav id="nav-${area}" aria-label="${title}${t("copy.88b7692bf5")}">${Object.entries(pages).map(([page, info]) => html`<a class="workspace-nav-link" href="${area === 'admin' ? '/admin/' : '/app/'}#${page}"
-        data-action="navigate" data-page="${page}" data-area="${area}" data-testid="nav-${area}-${page}"><span>${info[0]}</span><span class="nav-chevron" aria-hidden="true">›</span></a>`)}</nav></section>`)}</div>
+    <div class="nav" id="navigation">${groups.map(group => isAdmin ? html`<section class="workspace-nav-group">
+      <button class="workspace-nav-group-toggle" data-action="nav-group" data-value="${group[0]}" aria-expanded="true" aria-controls="nav-${group[0]}">${group[1]}<span aria-hidden="true">⌄</span></button>
+      ${navigation(group)}</section>` : navigation(group))}</div>
     <div class="sidebar-foot"><span>${t("copy.17dae5c572")}</span><a href="/app/#help" data-action="navigate" data-page="help" data-area="user">${t("copy.cde22723fd")}</a></div></aside>
     <div class="workspace"><header class="topbar"><div class="topbar-title"><a href="#overview" data-action="navigate" data-page="overview" data-area="${state.area}">
     ${state.area === 'admin' ? t("copy.ed498fef60") : t("copy.45de2b4b5d")}</a><span class="breadcrumb-divider" aria-hidden="true">/</span><span id="breadcrumb"></span></div>
@@ -137,7 +139,8 @@ export function providers(state) {
 const levels = [['auto', t("copy.7eb336e42c")], ['low', t("copy.aa9e366f68")], ['medium', t("copy.a567bdaa11")], ['high', t("copy.b1c27820fe")]];
 export function search(state) {
   const draft = state.searchDraft || {};
-  const advanced = [ ['authority', t("copy.0751e1fa72")], ['recall', t("copy.3e493076b1")], ['precision', t("copy.408ce7a76a")], ['semantic', t("copy.08a0087cdb")], ['source_diversity', t("copy.8faa9a617c")], ['latency', t("copy.fe62c19f4d")], ['cost', t("copy.04966f7fa4")] ];
+  const quality = [ ['authority', t("copy.0751e1fa72")], ['recall', t("copy.3e493076b1")], ['precision', t("copy.408ce7a76a")], ['semantic', t("copy.08a0087cdb")], ['source_diversity', t("copy.8faa9a617c")] ];
+  const preferences = [ ['latency', t("copy.fe62c19f4d")], ['cost', t("copy.04966f7fa4")] ];
   return html`${head(state, html`${button(t("copy.7ef9c46b79"), 'search-share')}${button(t("copy.84d5c41717"), 'search-curl')}`)}
     ${panel(t("copy.8e355d0549"), body(html`<form id="search-form" data-testid="search-form"><div class="search-bar">
       ${field('query', t("copy.b445ac0cb7"), draft.query || '', { id: 'search-query', required: true, maxlength: 10000, placeholder: t("copy.68af8e8c79") })}<button class="btn primary" type="submit">${t("search.run")}</button></div>
@@ -146,11 +149,14 @@ export function search(state) {
         'auto', 'general', 'news', 'academic', 'deep', 'coding', 'people']) })}
       ${field('freshness', t("copy.cea526c674"), draft.freshness || 'auto', { choices: [['auto', t("copy.7eb336e42c")], ['any', t("copy.f203d577d1")], ['day', t("copy.5448481f38")], ['week', t("copy.d94daba316")], ['month', t("copy.364a4dfc2d")], ['year', t("copy.3226061bb8")]] })}
       ${field('max_results', t("copy.fe884dfbf2"), draft.max_results || 10, { type: 'number', min: 1, max: 20, required: true })}</div>
-      <details><summary>${t("copy.584298f178")}</summary><div class="search-options">${advanced.map(([name, title]) => field(name, title, draft[name] || 'auto', { choices: levels }))}
-      ${field('latency_budget_ms', t("copy.8456d8fde6"), draft.latency_budget_ms || '', { type: 'number', min: 100, max: 60000 })}
-      ${field('cost_budget_usd', t("copy.8c89e7fa35"), draft.cost_budget_usd || '', { type: 'number', min: 0, max: 10, step: '0.001' })}
+      <details class="search-advanced"><summary>${t("copy.584298f178")}</summary><div class="search-advanced-body">
+      <div class="search-options search-quality">${quality.map(([name, title]) => field(name, title, draft[name] || 'auto', { choices: levels }))}
       ${field('fusion', t("copy.70e1ebe94a"), draft.fusion || 'weighted_rrf', { choices: options(['weighted_rrf', 'rrf', 'none']) })}</div>
-      ${field('search_domain_filter', t("copy.c1ba8890e2"), draft.search_domain_filter || '', { placeholder: 'python.org, -example.com', hint: t("copy.b2fcf6934b") })}</details>${formError()}</form>`))}
+      <div class="search-options search-budget">${preferences.map(([name, title]) => field(name, title, draft[name] || 'auto', { choices: levels }))}
+      ${field('latency_budget_ms', t("copy.8456d8fde6"), draft.latency_budget_ms || '', { type: 'number', min: 100, max: 60000 })}
+      ${field('cost_budget_usd', t("copy.8c89e7fa35"), draft.cost_budget_usd || '', { type: 'number', min: 0, max: 10, step: '0.001' })}</div>
+      <div class="search-domains">${field('search_domain_filter', t("copy.c1ba8890e2"), draft.search_domain_filter || '', { placeholder: 'python.org, -example.com', hint: t("copy.b2fcf6934b") })}</div>
+      </div></details>${formError()}</form>`))}
     ${panel(t("copy.88d72ece7c"),
       body(html`<div id="search-results" data-testid="search-results" aria-live="polite">${searchResults(state)}</div>`),
       html`<span class="results-meta" id="results-meta">${state.searchResult ? `${fmt(state.searchResult.results?.length)} ${t("copy.bd0bedc6f4")}` : t("copy.5698518d9c")}</span>`)}`;
@@ -167,7 +173,7 @@ export function keyTable(state) {
     return [html`<strong>${key.name}</strong><span class="cell-sub mono">${key.prefix}…</span>`, ...(state.area === 'admin' ? [key.username || key.user_id] : []), badge(status),
       html`${(key.scopes || ['search', 'protocol']).map(scope => scope === 'search' ? 'Search API' : t("copy.e2da29bdcb")).join(' · ')}<span class="cell-sub">${fmt(key.usage_count)} ${t("copy.d8762c5105")}</span>`,
       html`<span class="cell-sub">${t("copy.cde2cd071d")} ${date(key.created_at)}</span><span class="cell-sub">${t("copy.97399bd882")} ${date(key.expires_at, t("copy.2c60316d5e"))}</span><span class="cell-sub">${t("copy.cdfd0b34e4")} ${date(key.last_used_at)}</span>`,
-      key.revoked ? html`<span class="muted">${t("copy.fef96e34f7")}</span>` : more(button(t("copy.9585b9a120"), 'key-revoke', key.id, 'danger'))];
+      more(html`${key.revoked ? '' : button(t("copy.9585b9a120"), 'key-revoke', key.id, 'danger')}${button(t("key.delete"), 'key-delete', key.id, 'danger')}`)];
   })) : empty(t("copy.3c765c8279"), t("copy.97bf50f6e1"));
 }
 export function keys(state) {
@@ -195,7 +201,7 @@ export function audit(state) {
     
     ${field('since', t("copy.6a9906c79f"), filters.since || '', { type: 'datetime-local' })}
     ${field('until', t("copy.f502764499"), filters.until || '', { type: 'datetime-local' })}</div>${formError()}
-    <button class="btn" type="submit">${t("copy.a024d90a92")}</button></form>`))}
+    <div class="audit-actions"><button class="btn" type="submit">${t("copy.a024d90a92")}</button></div></form>`))}
     ${panel(t("copy.a0f79e91f1"), events.length ? table(t("copy.9e82c530e2"), [t("copy.8b6ff49851"), t("copy.e18e3f8ab2"), t("copy.be37d84119"), t("copy.53f92c0639")], events.map(event => [time(event.timestamp), event.actor_id || t("copy.5b50d7c4b5"),
       auditAction(event.action), html`${auditObject(event.object_type)}<span class="cell-sub mono">${event.object_id || '—'}</span>`])) : empty(t("copy.42a4c94685"), t("copy.9a33907c47")), badge('unknown', `${fmt(state.data.total)} ${t("copy.f004f1d84c")}`))}
     <div class="actions">${button(t("copy.c9b9ae7a61"), 'audit-prev')}${button(t("copy.8a8542f696"), 'audit-next')}<span>${t("copy.af50a0fe2a")} ${Math.floor(state.auditOffset / 50) + 1} ${t("copy.d24d3c9946")}</span></div>`;

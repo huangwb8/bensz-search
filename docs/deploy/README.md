@@ -15,7 +15,7 @@ Dockerfile、Compose 配置、部署脚本和环境变量示例统一位于本�
 - `compose.yaml`：默认真实服务；`compose.demo.yaml`：模拟测试；`compose.live.yaml`：独立 live demo。
 - `deploy_local.py`：生成私有配置并部署；`.env.example`：环境变量示例。
 
-单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:1.0.3 .`。
+单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:1.0.7 .`。
 
 ## 初始化与登录
 
@@ -41,7 +41,7 @@ OpenAI 可直接在后台添加，填写 Key、支持 `web_search` 的模型和 
 
 管理员可创建、编辑角色、重置密码、停用和删除用户；禁止删除、停用或降级最后一个启用的管理员。成员不能修改 provider/用户。登录为 12 小时 session，可查看登录会话和退出其他设备；注销或改密后撤销会话；改密不自动撤销独立应用 key，需在用户区“我的密钥”或管理员区“全体访问密钥”撤销。删除用户级联删除其会话和 key。
 
-后台生成的 key 可调用原生搜索 POST、v1 能力发现与搜索以及 MCP 入口，默认允许当前全部启用服务；不开放原生 LiteLLM 管理路由，不提供按用户账单或原生 virtual-key DB 管理。应用应使用专属 key 而非 master key。完整 key 仅在生成时展示，数据库保存哈希与前缀；撤销、过期或停用用户立即拒绝新请求。可选择 `search`（原生搜索与工具发现）/`protocol`（协议与 MCP）范围；管理员可查看和撤销全体密钥。
+后台生成的 key 可调用原生搜索 POST、v1 能力发现与搜索以及 MCP 入口，默认允许当前全部启用服务；不开放原生 LiteLLM 管理路由，不提供按用户账单或原生 virtual-key DB 管理。应用应使用专属 key 而非 master key。完整 key 仅在生成时展示，数据库保存哈希与前缀；撤销、过期或停用用户立即拒绝新请求。可选择 `search`（原生搜索与工具发现）/`protocol`（协议与 MCP）范围；管理员可查看、撤销和删除全体密钥。用户可在“我的密钥”中直接删除有效、已撤销或已过期密钥；删除立即失效并永久移除列表记录，历史审计仍保留。
 
 Cookie 为 HttpOnly/SameSite Strict；写接口检查 CSRF 与 Origin。当前纯本机 HTTP 设置 `BENSZ_SEARCH_COOKIE_SECURE=false`，将来部署 HTTPS 时设置 true。登录限速、运行指标和熔断均为单进程，当前部署不启用多 worker。
 

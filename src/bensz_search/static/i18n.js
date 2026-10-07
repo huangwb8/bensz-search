@@ -1,5 +1,10 @@
 /** Central product copy. Missing locale entries fall back to Simplified Chinese. */
 const zh = {
+  "key.delete": "删除密钥",
+  "key.deleteTitle": "删除访问密钥",
+  "key.deleteWarning": "删除后密钥立即失效，并从列表中永久移除，无法恢复。历史审计记录仍会保留。",
+  "key.deleteConfirm": "确认删除密钥",
+  "key.deleted": "访问密钥已删除",
   "provider.copyLink": "复制配置链接",
   "intent.explicit": "指定服务", "intent.protocol": "协议搜索", "audit.changePassword": "修改密码",
   "error.searchFailure": "搜索失败：", "release.unavailable": "暂时无法检查新版本，可通过版本说明查看最新发布。",
@@ -72,7 +77,7 @@ const zh = {
   "copy.7bc3f12944": "搜索调试台",
   "copy.3c64829b3a": "检查真实搜索结果与路由执行。",
   "copy.d497c15b0c": "全体访问密钥",
-  "copy.a5ed694c84": "查看并撤销所有用户的密钥；个人密钥在用户区管理。",
+  "copy.a5ed694c84": "查看、撤销或删除所有用户的密钥；个人密钥在用户区管理。",
   "copy.fbf413d429": "用户管理",
   "copy.b25cfe77f2": "管理后台账号、角色与访问权限。",
   "copy.a0f79e91f1": "审计日志",
@@ -512,6 +517,9 @@ const zh = {
   "copy.f15d0b371a": "登录会话即将过期；再次操作时可重新登录，当前表单会保留。"
 };
 const en = {
+  'key.delete': 'Delete key', 'key.deleteTitle': 'Delete access key',
+  'key.deleteWarning': 'The key will stop working immediately and be permanently removed from the list. This cannot be undone. Audit history will be retained.',
+  'key.deleteConfirm': 'Confirm key deletion', 'key.deleted': 'Access key deleted',
   'common.cancel': 'Cancel', 'common.close': 'Close', 'provider.save': 'Save configuration',
   'provider.saveTest': 'Save and test', 'account.username': 'Username', 'account.password': 'Password', 'search.run': 'Search',
 };

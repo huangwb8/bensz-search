@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from litellm.llms.base_llm.search.transformation import SearchResponse, SearchResult
 from test_admin import console as console
 from test_admin import login
@@ -25,7 +26,8 @@ def rpc(console, headers, method, params=None, request_id=1):
     )
 
 
-def test_application_key_discovery_execution_revocation_and_errors(console):
+@pytest.mark.parametrize("permanent", [False, True])
+def test_application_key_discovery_execution_revocation_and_errors(console, permanent):
     admin, key, headers = application_key(console)
     calls = []
 
@@ -57,7 +59,14 @@ def test_application_key_discovery_execution_revocation_and_errors(console):
     assert console.get("/admin/api/providers", headers=headers).status_code in {401, 403}
     # Reauthenticate the console to revoke the application credential.
     admin = login(console)
-    assert console.delete("/admin/api/keys/" + key["record"]["id"], headers=admin).status_code == 200
+    assert (
+        console.delete(
+            "/admin/api/keys/" + key["record"]["id"], params={"permanent": permanent}, headers=admin
+        ).status_code
+        == 200
+    )
+    assert bool(console.get("/admin/api/keys").json()["keys"]) is not permanent
+    assert console.post("/search", headers=headers, json={"query": "deleted-key"}).status_code == 401
     assert console.get("/bensz-search/v1/capabilities", headers=headers).status_code == 401
     assert console.post("/bensz-search/v1/search", headers=headers, json=request).status_code == 401
     assert rpc(console, headers, "tools/list").status_code == 401

@@ -206,6 +206,7 @@ def test_governance_read_endpoints_require_administrator(console, path):
     [
         ("PUT", "/users/2", {"role": "admin"}),
         ("DELETE", "/keys/key-id?scope=all", None),
+        ("DELETE", "/keys/key-id?scope=all&permanent=true", None),
         ("POST", "/sessions/revoke-others", None),
         ("POST", "/providers/import", {"version": 1, "providers": []}),
     ],
@@ -338,6 +339,75 @@ def test_global_keys_require_admin_and_explicit_global_scope(console):
         ).status_code
         == 401
     )
+
+
+@pytest.mark.parametrize("status", ["active", "revoked", "expired"])
+def test_owner_can_permanently_delete_keys_in_any_status(console, status):
+    admin_headers = login(console)
+    create_member(console, admin_headers)
+    headers = login(console, "governance-member", "member-password-strong")
+    created = console.post("/admin/api/keys", headers=headers, json={"name": "delete-test"}).json()
+    key_id = created["record"]["id"]
+    path = f"/admin/api/keys/{key_id}"
+    store = console.app.state.admin_runtime.store
+    if status == "revoked":
+        assert console.delete(path, headers=headers).status_code == 200
+        assert console.get("/admin/api/keys").json()["keys"][0]["revoked"]
+    elif status == "expired":
+        with store.lock, store.db:
+            store.db.execute("UPDATE access_keys SET expires_at=? WHERE id=?", (time.time() - 1, key_id))
+    assert console.delete(path + "?permanent=true", headers=headers).status_code == 200
+    assert console.get("/admin/api/keys").json()["keys"] == []
+    assert store.authenticate_key(created["key"]) is None
+    with store.lock:
+        assert store.db.execute("SELECT 1 FROM access_keys WHERE id=?", (key_id,)).fetchone() is None
+    assert console.delete(path + "?permanent=true", headers=headers).status_code == 404
+    admin_headers = login(console)
+    events = console.get("/admin/api/audit?object_type=key").json()["events"]
+    deleted = [event for event in events if event["action"] == "delete" and event["object_id"] == key_id]
+    assert len(deleted) == 1
+    assert deleted[0]["actor_id"] == created["record"]["user_id"]
+    assert any(event["action"] == "create" and event["object_id"] == key_id for event in events)
+
+
+def test_permanent_key_deletion_preserves_owner_and_admin_scope(console):
+    admin_headers = login(console)
+    admin_key = console.post("/admin/api/keys", headers=admin_headers, json={"name": "admin-owned"}).json()
+    create_member(console, admin_headers)
+    member_headers = login(console, "governance-member", "member-password-strong")
+    member_key = console.post("/admin/api/keys", headers=member_headers, json={"name": "member-owned"}).json()
+    path = f"/admin/api/keys/{member_key['record']['id']}?permanent=true"
+    other_path = f"/admin/api/keys/{admin_key['record']['id']}?permanent=true"
+    assert console.delete(path + "&scope=all", headers=member_headers).status_code == 403
+    assert console.delete(other_path, headers=member_headers).status_code == 404
+    assert console.app.state.admin_runtime.store.authenticate_key(admin_key["key"]) is not None
+    admin_headers = login(console)
+    assert console.delete(path, headers=admin_headers).status_code == 404
+    assert console.app.state.admin_runtime.store.authenticate_key(member_key["key"]) is not None
+    assert console.delete(path + "&scope=all", headers=admin_headers).status_code == 200
+    keys = console.get("/admin/api/keys?scope=all").json()["keys"]
+    assert [key["id"] for key in keys] == [admin_key["record"]["id"]]
+    events = console.get("/admin/api/audit?object_type=key").json()["events"]
+    deleted = [event for event in events if event["action"] == "delete"]
+    assert len(deleted) == 1 and deleted[0]["actor_id"] == admin_key["record"]["user_id"]
+
+
+def test_key_deletion_rolls_back_if_audit_write_fails(tmp_path, monkeypatch):
+    store = AdminStore(tmp_path / "keys.sqlite3", secrets.token_urlsafe(48))
+    try:
+        store.bootstrap("admin", "test-password-strong")
+        created = store.create_key(1, "transaction-test")
+
+        def fail_audit(*args):
+            raise sqlite3.OperationalError("synthetic audit failure")
+
+        monkeypatch.setattr(store, "_audit", fail_audit)
+        with pytest.raises(sqlite3.OperationalError):
+            store.delete_key(1, created["record"]["id"])
+        assert store.authenticate_key(created["key"]) is not None
+        assert len(store.keys(1)) == 1
+    finally:
+        store.db.close()
 
 
 def test_public_sessions_are_opaque_and_revoke_others_is_owner_scoped(console):

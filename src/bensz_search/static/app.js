@@ -356,6 +356,8 @@ const actions = {
   'key-create': () => openDialog(t("copy.4e800de275"), keyForm()),
   'key-revoke': node => confirmAction(t("copy.b115c361e1"), t("copy.4d7eb33ed9"),
     async () => { await api(`/keys/${encodeURIComponent(node.dataset.value)}${state.area === 'admin' ? '?scope=all' : ''}`, 'DELETE'); await refresh(); notify(t("copy.c45b2a26d9")); }, t("copy.29b78a203e")),
+  'key-delete': node => confirmAction(t("key.deleteTitle"), t("key.deleteWarning"),
+    async () => { await api(`/keys/${encodeURIComponent(node.dataset.value)}?permanent=true${state.area === 'admin' ? '&scope=all' : ''}`, 'DELETE'); await refresh(); notify(t("key.deleted")); }, t("key.deleteConfirm")),
   'copy-key': () => copy(state.secret), 'key-done': () => closeDialog(true),
   'user-create': () => { state.editor = null; openDialog(t("copy.7db1237290"), userForm()); },
   'user-edit': node => { state.editor = state.data.users.find(user => String(user.id) === node.dataset.value); openDialog(t("copy.7645d83833"), userForm(state.editor)); },

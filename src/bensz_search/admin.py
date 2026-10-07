@@ -774,15 +774,17 @@ def create_key(data: KeyInput, session=Depends(current_session), runtime=Depends
 
 
 @router.delete("/keys/{key_id}")
-def revoke_key(
+def remove_key(
     key_id: str,
     scope: Literal["mine", "all"] = "mine",
+    permanent: bool = False,
     session=Depends(current_session),
     runtime=Depends(get_runtime),
 ):
     if scope == "all" and session["user"]["role"] != "admin":
         raise HTTPException(403, "需要管理员权限")
-    if not runtime.store.revoke_key(
+    operation = runtime.store.delete_key if permanent else runtime.store.revoke_key
+    if not operation(
         None if scope == "all" else session["user"]["id"],
         key_id,
         session["user"]["id"],

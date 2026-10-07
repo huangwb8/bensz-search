@@ -395,6 +395,17 @@ class AdminStore:
                 self._audit(actor_id if actor_id is not None else user_id, "revoke", "key", key_id)
             return count
 
+    def delete_key(self, user_id, key_id, actor_id=None):
+        with self.lock, self.db:
+            where = " AND user_id=?" if user_id is not None else ""
+            count = self.db.execute(
+                "DELETE FROM access_keys WHERE id=?" + where,
+                (key_id, user_id) if user_id is not None else (key_id,),
+            ).rowcount
+            if count:
+                self._audit(actor_id if actor_id is not None else user_id, "delete", "key", key_id)
+            return count
+
     def authenticate_key(self, key, required_scope=None):
         with self.lock:
             row = self.db.execute(

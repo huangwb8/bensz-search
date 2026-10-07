@@ -7,7 +7,7 @@
 
 A standalone extension on LiteLLM 1.103.2 with no upstream source changes. Administrators configure and test providers and manage users; members search and create application keys in a personal workspace. Automatic search selects providers from task requirements and constraints, with timeouts, fallback, deduplication and weighted RRF fusion. External AI hosts can discover capabilities and submit individual engine queries.
 
-Current release: `v1.0.5`. The official image is [`huangwb8/bensz-search:1.0.5`](https://hub.docker.com/r/huangwb8/bensz-search), available for `linux/amd64` only, with a matching `latest` tag. Operators must configure usable providers; commercial services require their own API Key.
+Current release: `v1.0.7`. The official image is [`huangwb8/bensz-search:1.0.7`](https://hub.docker.com/r/huangwb8/bensz-search), available for `linux/amd64` only, with a matching `latest` tag. Operators must configure usable providers; commercial services require their own API Key.
 
 `v1.0.4` adds native bensz-search providers: compose remote instances recursively with cycle detection, bounded calls and deadlines, and leaf-source deduplication. Configure the remote base URL and an independent application key in Search API. All participating instances must support federation. See [configuration and limits](docs/smart-search-router/federated-search.md).
 
@@ -32,7 +32,9 @@ The default SearXNG URL is `http://host.docker.internal:8080`; run a real instan
 | Administrator console | `/admin` | Global overview, Search API configuration and live tests, users, all users’ keys, audit logs and search |
 | Personal workspace | `/app` | Available providers and personal key overview, search, integration and account settings |
 
-Administrators see vertically arranged, independently collapsible administrator/member navigation sections; members see only their personal section. Pages support refresh and browser history, the brand area shows the running version, and mobile navigation remains available. The server enforces roles and key ownership.
+Administrators keep two collapsible navigation groups whose items are indented with a light hierarchy line; members see a flat personal menu without group headings. Pages support refresh and browser history, the brand area shows the running version, and mobile navigation remains available. The server enforces roles and key ownership.
+
+**v1.0.7** adds permanent key deletion: users can delete their own keys and administrators can delete any user's keys in active, revoked or expired state; deletion is immediate while audit history is preserved. It also refines sidebar hierarchy, control heights, filter alignment and dialog actions; see the [console guide](docs/smart-search-router/commercial-admin.md).
 
 **v1.0.5** adds console governance and operational metrics. The overview supports process metrics and the last 7/30 UTC calendar days. Latency percentiles use histogram bucket upper bounds, and costs are estimates rather than provider bills. See the [console guide](docs/smart-search-router/commercial-admin.md) for user lifecycle, expiring/scoped keys, sessions and configuration import/export.
 
@@ -42,7 +44,7 @@ OpenAI uses Responses `web_search`, defaults to `gpt-4.1-mini`, and labels gener
 
 ## Search and AI integration
 
-Create an application key in the console and inject it as `BENSZ_SEARCH_API_KEY`. Its full value is shown once; revocation is immediate. Keys support optional `search` and `protocol` scopes; both are enabled by default. Expired/revoked keys and disabled users are rejected immediately. Application keys and login passwords are separate.
+Create an application key in the console and inject it as `BENSZ_SEARCH_API_KEY`. Its full value is shown once; revocation and deletion are immediate. Active, revoked and expired keys can be permanently deleted. Keys support optional `search` and `protocol` scopes; both are enabled by default. Expired/revoked keys and disabled users are rejected immediately. Application keys and login passwords are separate.
 
 ```bash
 curl --noproxy '*' http://127.0.0.1:8898/search \
@@ -80,13 +82,13 @@ docker compose -f docs/deploy/compose.yaml up -d --build --wait
 docker compose -f docs/deploy/compose.yaml ps
 ```
 
-Version 1.0.5 applies incremental database migrations automatically. Rolling back to an older image also requires restoring the pre-upgrade database snapshot. See the [v1.0.5 release verification](docs/deploy/releases/v1.0.5.md).
+Since 1.0.5 the service applies incremental database migrations automatically. Rolling back to an older image also requires restoring the pre-upgrade database snapshot. See the [v1.0.5 release verification](docs/deploy/releases/v1.0.5.md) and the [v1.0.7 release verification](docs/deploy/releases/v1.0.7.md).
 
 For server upgrades, back up the previous image ID, Compose file, private settings and SQLite databases in `/docker/bensz-search`, then update only the search service:
 
 ```bash
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.5 docker compose -f docker-compose.yml pull search
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.5 docker compose -f docker-compose.yml up -d --no-deps --wait search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.7 docker compose -f docker-compose.yml pull search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.7 docker compose -f docker-compose.yml up -d --no-deps --wait search
 ```
 
 Containers run as non-root with memory, concurrency, PID and log limits. Deployment is currently a single process on one host; shared multi-instance state is unverified. Do not use `down -v` for routine restarts. HTTPS hosting requires Secure Cookie settings and forwarded-header trust restricted to actual proxy IPs. See [local deployment](docs/deploy/README.md) and [server deployment](docs/deploy/server-deployment.md) for backups, recovery and proxy settings.

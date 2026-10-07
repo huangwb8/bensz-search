@@ -9,7 +9,7 @@
 | 供应商 API Key | Exa、Brave 等供应商的开发者控制台 | bensz-search 后台 → **Search API** → 添加或编辑服务 → **API Key** | bensz-search 向供应商发起搜索 |
 | bensz-search 访问密钥 | 用户区 → **我的密钥** → **创建我的密钥** | 应用请求的 `Authorization: Bearer …` | 应用或 AI Agent 调用 bensz-search |
 
-供应商 Key 输入框只粘贴密钥本身，不加 `Bearer `、`x-api-key:` 等前缀，也不粘贴整段 curl。后台登录密码用于登录；应用接入使用“我的密钥”页面生成的 key。管理员区的“全体访问密钥”用于查看和撤销所有用户的密钥。密钥可设置过期时间；原生 Search API 需要 `search` 权限，协议 HTTP 与 MCP 需要 `protocol` 权限，默认同时授予两者。
+供应商 Key 输入框只粘贴密钥本身，不加 `Bearer `、`x-api-key:` 等前缀，也不粘贴整段 curl。后台登录密码用于登录；应用接入使用“我的密钥”页面生成的 key。管理员区的“全体访问密钥”用于查看、撤销和删除所有用户的密钥；用户可在“我的密钥”中删除自己的有效、已撤销或已过期密钥。密钥可设置过期时间；原生 Search API 需要 `search` 权限，协议 HTTP 与 MCP 需要 `protocol` 权限，默认同时授予两者。
 
 ## 后台添加的通用步骤
 
