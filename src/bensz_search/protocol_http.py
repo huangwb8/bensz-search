@@ -19,7 +19,11 @@ async def permission_snapshot(request, user, enforce_protocol=True):
         raise ProtocolFailure("protocol_disabled", "Search protocol is disabled", status_code=503)
     smart = request.app.state.smart_search
     runtime = getattr(request.app.state, "admin_runtime", None)
-    names = runtime.active_names() if runtime else smart.registry.configured(proxy.llm_router.search_tools)
+    names = (
+        {r["name"] for r in smart.provider_snapshot if r["enabled"]}
+        if runtime
+        else smart.registry.configured(proxy.llm_router.search_tools)
+    )
     team = await load_team(user)
     allowed = await authorized_tools(names, user, team)
     # Pin execution to this router instance even if configuration is refreshed later.
@@ -53,6 +57,13 @@ async def execute_for_user(request, user, data, cancel_on_disconnect=False):
     identity = str(user.user_id or user.api_key)
     admission = limiter(request.app)
     admission.enter(identity, limits)
+    capacity = getattr(request.app.state, "search_capacity", None)
+    admitted = capacity is not None and not request.scope.get("bensz_search_admitted")
+    if admitted and not capacity.enter():
+        admission.leave(identity)
+        raise ProtocolFailure(
+            "rate_limit", "Search capacity exhausted; retry later", status_code=429, retryable=True
+        )
     task = None
     watcher = None
     try:
@@ -74,6 +85,8 @@ async def execute_for_user(request, user, data, cancel_on_disconnect=False):
                 job.cancel()
         await asyncio.gather(*(j for j in (task, watcher) if j), return_exceptions=True)
         admission.leave(identity)
+        if admitted:
+            capacity.leave()
 
 
 @router.get("/capabilities", response_model=CapabilitySnapshot)

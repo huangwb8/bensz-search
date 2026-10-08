@@ -7,7 +7,7 @@
 
 A standalone extension on LiteLLM 1.103.2 with no upstream source changes. Administrators configure and test providers and manage users; members search and create application keys in a personal workspace. Automatic search selects providers from task requirements and constraints, with timeouts, fallback, deduplication and weighted RRF fusion. External AI hosts can discover capabilities and submit individual engine queries.
 
-Current release: `v1.0.8`. The official image is [`huangwb8/bensz-search:1.0.8`](https://hub.docker.com/r/huangwb8/bensz-search), available for `linux/amd64` only, with a matching `latest` tag. Operators must configure usable providers; commercial services require their own API Key.
+Current release: `v1.0.9`. The official image is [`huangwb8/bensz-search:1.0.9`](https://hub.docker.com/r/huangwb8/bensz-search), available for `linux/amd64` only, with a matching `latest` tag. Operators must configure usable providers; commercial services require their own API Key.
 
 ## Quick start
 
@@ -27,10 +27,12 @@ The default SearXNG URL is `http://host.docker.internal:8080`; run a real instan
 
 | Workspace | Entry | Features |
 |---|---|---|
-| Administrator console | `/admin` | Global overview, Search API configuration and live tests, users, all users’ keys, audit logs and search |
-| Personal workspace | `/app` | Available providers and personal key overview, search, integration and account settings |
+| Administrator console | `/admin` | Global overview, search engines and live tests, users, administrator keys (all users), audit logs, search debugging and [system settings](docs/smart-search-router/system-settings.md) |
+| Personal workspace | `/app` | Available providers, personal keys, per-engine personal usage and trends for the last 7/30 days, search, integration and account settings |
 
 Administrators keep two collapsible navigation groups whose items are indented with a light hierarchy line; members see a flat personal menu without group headings. Pages support refresh and browser history, the brand area shows the running version, and mobile navigation remains available. The server enforces roles and key ownership.
+
+**v1.0.9** adds session resource caching and independent page sections, SQLite/usage persistence in bounded worker threads, search admission control and paginated key/user lists to reduce synchronous waits during searches. It also adds personal usage trends and persistent system settings. Performance figures come from isolated experiments; see [implementation and validation](docs/smart-search-router/performance-implementation.md) for conditions and results.
 
 **v1.0.8** improves console and personal workspace readability: body text and inputs use 16 px, navigation and table rows use 15 px, and labels use 14 px, with consistent line heights and clearer text contrast. Page title size and control height are preserved.
 
@@ -84,13 +86,13 @@ docker compose -f docs/deploy/compose.yaml up -d --build --wait
 docker compose -f docs/deploy/compose.yaml ps
 ```
 
-Since 1.0.5 the service applies incremental database migrations automatically. Rolling back to an older image also requires restoring the pre-upgrade database snapshot. See the [v1.0.5 release verification](docs/deploy/releases/v1.0.5.md) and the [v1.0.8 release verification](docs/deploy/releases/v1.0.8.md).
+Since 1.0.5 the service applies incremental database migrations automatically. Rolling back to an older image also requires restoring the pre-upgrade database snapshot. See the [v1.0.5 release verification](docs/deploy/releases/v1.0.5.md) and the [v1.0.9 release verification](docs/deploy/releases/v1.0.9.md).
 
 For server upgrades, back up the previous image ID, Compose file, private settings and SQLite databases in `/docker/bensz-search`, then update only the search service:
 
 ```bash
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.8 docker compose -f docker-compose.yml pull search
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.8 docker compose -f docker-compose.yml up -d --no-deps --wait search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.9 docker compose -f docker-compose.yml pull search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.9 docker compose -f docker-compose.yml up -d --no-deps --wait search
 ```
 
 Containers run as non-root with memory, concurrency, PID and log limits. Deployment is currently a single process on one host; shared multi-instance state is unverified. Do not use `down -v` for routine restarts. HTTPS hosting requires Secure Cookie settings and forwarded-header trust restricted to actual proxy IPs. See [local deployment](docs/deploy/README.md) and [server deployment](docs/deploy/server-deployment.md) for backups, recovery and proxy settings.

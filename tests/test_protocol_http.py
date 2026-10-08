@@ -124,3 +124,6 @@ def test_mcp_standard_discovery_and_shared_search_result(console):
     assert invalid.json()["result"]["isError"]
     assert "SECRET" not in invalid.text
     assert len(called) == 2
+    personal = console.get("/admin/api/usage/me").json()
+    assert personal["summary"]["requests"] == 2
+    assert personal["by_provider"][0]["requests"] == 2

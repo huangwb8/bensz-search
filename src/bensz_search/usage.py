@@ -2,7 +2,7 @@
 
 from bisect import bisect_left
 
-# Persist bucket counts, never raw queries, URLs, user identifiers or unbounded samples.
+# Persist bucket counts, never raw queries, URLs, identifying details or unbounded samples.
 LATENCY_BOUNDS = (25, 50, 100, 200, 400, 800, 1500, 3000, 6000, 10000, 15000, 30000, 60000)
 SUCCESS = {"success", "partial_success"}
 

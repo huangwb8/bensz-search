@@ -142,6 +142,7 @@ def test_concurrent_sqlite_aggregate_updates_do_not_lose_calls(tmp_path):
     path = tmp_path / "concurrent.sqlite3"
     secret = secrets.token_urlsafe(48)
     stores = [AdminStore(path, secret) for _ in range(2)]
+    stores[0].bootstrap("admin", "synthetic-password-strong")
     event = {
         "timestamp": "2099-01-01T00:00:00+00:00",
         "result_count": 1,
@@ -158,8 +159,9 @@ def test_concurrent_sqlite_aggregate_updates_do_not_lose_calls(tmp_path):
         ],
     }
     with ThreadPoolExecutor(max_workers=2) as pool:
-        list(pool.map(lambda i: stores[i % 2].record_usage(event), range(30)))
+        list(pool.map(lambda i: stores[i % 2].record_usage(event, user_id=1), range(30)))
     assert stores[0].usage(7)["summary"]["requests"] == 30
+    assert stores[0].usage(7, user_id=1)["summary"]["requests"] == 30
     for store in stores:
         store.close()
 

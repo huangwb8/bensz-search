@@ -26,7 +26,9 @@ from .openai_search import DEFAULT_MODEL, provider_call
 from .registry import Registry
 from .router import SearchFailed, failure_category
 from .searxng import DEFAULT_ENGINES, INTENT_ENGINE_GROUPS
-from .telemetry import usage_key
+from .settings import SettingsInput
+from .telemetry import usage_key, usage_user
+from .work import BlockingWork
 
 CATALOG = [
     {
@@ -202,6 +204,8 @@ class AdminRuntime:
         self.release_lock = asyncio.Lock()
         self.release_checked_at = 0
         self.release_cache = None
+        self.work = BlockingWork(workers=8, capacity=32)
+        self.provider_snapshot = ()
         self.app, self.proxy, self.store, self.templates, self.callback = (
             app,
             proxy,
@@ -266,11 +270,13 @@ class AdminRuntime:
         smart.health = health
         smart.planner.health = health
         self.callback.registry = registry
+        smart.provider_snapshot = tuple({k: v for k, v in r.items() if k != "api_key"} for r in records)
         self.app.state.smart_search = smart
+        self.provider_snapshot = smart.provider_snapshot
         previous._bensz_lease.retire()
 
     def active_names(self):
-        return {r["name"] for r in self.store.providers() if r["enabled"]}
+        return {r["name"] for r in self.app.state.smart_search.provider_snapshot if r["enabled"]}
 
     async def release_notes(self):
         async with self.release_lock:
@@ -358,12 +364,13 @@ async def managed_api_auth(request: Request, api_key: str | None):
         raise HTTPException(403, "Managed access keys are only valid for search requests")
     required_scope = "search" if is_search or path == "/search/tools" else "protocol"
     try:
-        record = runtime.store.authenticate_key(token, required_scope)
+        record = await runtime.work.run(runtime.store.authenticate_key, token, required_scope)
     except PermissionError:
         raise HTTPException(403, "访问密钥不具备该接口的权限") from None
     if record is None:
         raise HTTPException(401, "Invalid or revoked access key")
     usage_key.set(record["id"])
+    usage_user.set(record["user_id"])
     return UserAPIKeyAuth(
         api_key=digest(token),
         user_id=str(record["user_id"]),
@@ -376,6 +383,35 @@ async def managed_api_auth(request: Request, api_key: str | None):
 
 
 router = APIRouter(prefix="/admin/api", tags=["bensz-search console"])
+
+
+@router.get("/site")
+def site_metadata(runtime=Depends(get_runtime)):
+    return {k: v for k, v in runtime.store.system_settings().items() if k != "revision"}
+
+
+@router.get("/settings")
+def system_settings(session=Depends(administrator), runtime=Depends(get_runtime)):
+    return {
+        "settings": runtime.store.system_settings(),
+        "deployment": {
+            "version": __version__,
+            "session_lifetime_hours": 12,
+            "secure_cookies": os.getenv("BENSZ_SEARCH_COOKIE_SECURE", "false").lower() == "true",
+            "public_registration": False,
+        },
+    }
+
+
+@router.put("/settings")
+def save_system_settings(data: SettingsInput, session=Depends(administrator), runtime=Depends(get_runtime)):
+    fields = data.model_dump(exclude={"expected_revision"})
+    try:
+        return runtime.store.save_system_settings(fields, data.expected_revision, session["user"]["id"])
+    except ValueError as error:
+        raise HTTPException(409, "系统设置已被其他管理员更新，请重新加载后保存") from error
+
+
 login_attempts = defaultdict(deque)
 
 
@@ -393,7 +429,7 @@ async def login(data: Login, request: Request, response: Response, runtime=Depen
     if len(login_attempts) >= 10000 or len(login_attempts[address]) >= 5:
         raise HTTPException(429, "登录尝试过多，请五分钟后重试")
     login_attempts[address].append(now)
-    result = await asyncio.to_thread(runtime.store.login, data.username, data.password)
+    result = await runtime.work.run(runtime.store.login, data.username, data.password)
     if result is None:
         raise HTTPException(401, "用户名或密码错误")
     login_attempts.pop(address, None)
@@ -427,12 +463,13 @@ def logout(
 @router.get("/overview")
 def overview(
     window: Literal["process", "7d", "30d"] = "process",
+    compact: bool = False,
     session=Depends(current_session),
     runtime=Depends(get_runtime),
 ):
-    providers = runtime.store.providers()
+    providers = list(runtime.app.state.smart_search.provider_snapshot)
     metrics = (
-        runtime.app.state.smart_search.telemetry.snapshot()
+        runtime.app.state.smart_search.telemetry.snapshot(compact=compact)
         if window == "process"
         else runtime.store.usage(7 if window == "7d" else 30)
     )
@@ -451,12 +488,40 @@ def overview(
         "enabled_count": sum(r["enabled"] for r in providers),
         "providers": providers,
         "metrics": metrics,
+        "performance": {
+            "store": runtime.store.performance(),
+            "runtime": runtime.app.state.performance.snapshot(),
+            "search_capacity": runtime.app.state.search_capacity.snapshot(),
+        }
+        if session["user"]["role"] == "admin" and hasattr(runtime.app.state, "performance")
+        else {},
     }
+
+
+@router.get("/workspace")
+def workspace(session=Depends(current_session), runtime=Depends(get_runtime)):
+    smart = runtime.app.state.smart_search
+    records = [{k: r[k] for k in ("name", "provider", "enabled")} for r in smart.provider_snapshot]
+    return {
+        "version": __version__,
+        "generation": smart.generation,
+        "providers": records,
+        "configured_count": len(records),
+        "enabled_count": sum(r["enabled"] for r in records),
+    }
+
+
+@router.get("/requests/{request_id}")
+def request_detail(request_id: str, session=Depends(administrator), runtime=Depends(get_runtime)):
+    event = runtime.app.state.smart_search.telemetry.detail(request_id)
+    if event is None:
+        raise HTTPException(404, "请求已不在当前进程历史中")
+    return event
 
 
 @router.get("/providers")
 def providers(session=Depends(administrator), runtime=Depends(get_runtime)):
-    records = runtime.store.providers()
+    records = [dict(r) for r in runtime.app.state.smart_search.provider_snapshot]
     for record in records:
         record["health"] = runtime.app.state.smart_search.health.snapshot(record["name"], record["enabled"])
     return {"providers": records, "catalog": CATALOG}
@@ -522,6 +587,15 @@ def usage(days: int = Query(default=7), session=Depends(administrator), runtime=
     if days not in {7, 30}:
         raise HTTPException(422, "统计窗口仅支持 7 天或 30 天")
     return runtime.store.usage(days)
+
+
+@router.get("/usage/me")
+def personal_usage(
+    days: int = Query(default=7), session=Depends(current_session), runtime=Depends(get_runtime)
+):
+    if days not in {7, 30}:
+        raise HTTPException(422, "统计窗口仅支持 7 天或 30 天")
+    return runtime.store.usage(days, user_id=session["user"]["id"])
 
 
 @router.get("/sessions")
@@ -611,7 +685,8 @@ def delete_provider(name: str, session=Depends(administrator), runtime=Depends(g
 async def test_provider(
     name: str, data: TestQuery, session=Depends(administrator), runtime=Depends(get_runtime)
 ):
-    record = next((p for p in runtime.store.providers(private=True) if p["name"] == name), None)
+    records = await runtime.work.run(runtime.store.providers, private=True)
+    record = next((p for p in records if p["name"] == name), None)
     if record is None:
         raise HTTPException(404, "配置不存在")
     started = time.monotonic()
@@ -619,7 +694,9 @@ async def test_provider(
     temporary = None
     try:
         # Disabled configurations remain testable; they are not inserted into the live router.
-        temporary = litellm.Router(model_list=[], search_tools=[runtime.tool(record)], num_retries=0)
+        temporary = await runtime.work.run(
+            litellm.Router, model_list=[], search_tools=[runtime.tool(record)], num_retries=0
+        )
         result = await asyncio.wait_for(
             provider_call(temporary, temporary.asearch)(
                 search_tool_name=name, query=data.query, max_results=3, num_retries=0
@@ -649,14 +726,15 @@ async def test_provider(
         }
     finally:
         if temporary is not None:
-            temporary.discard()
+            await runtime.work.run(temporary.discard)
 
 
 @router.post("/providers/{name}/engines/sync")
 async def sync_provider_engines(name: str, session=Depends(administrator), runtime=Depends(get_runtime)):
     from .engine_metadata import verified_instance_engines
 
-    record = next((p for p in runtime.store.providers(private=True) if p["name"] == name), None)
+    records = await runtime.work.run(runtime.store.providers, private=True)
+    record = next((p for p in records if p["name"] == name), None)
     if record is None:
         raise HTTPException(404, "配置不存在")
     try:
@@ -664,16 +742,19 @@ async def sync_provider_engines(name: str, session=Depends(administrator), runti
     except Exception:
         raise HTTPException(502, "无法验证实例引擎信息；未更改已保存的配置") from None
     # Do not overwrite a concurrent provider edit with this older fetched snapshot.
-    current = next((p for p in runtime.store.providers(private=True) if p["name"] == name), None)
+    records = await runtime.work.run(runtime.store.providers, private=True)
+    current = next((p for p in records if p["name"] == name), None)
     if current != record:
         raise HTTPException(409, "配置已变化，请重新同步")
     public = {k: v for k, v in record.items() if k not in {"api_key", "has_api_key"}}
     public.update(verified_engines=engines, engine_evidence=evidence)
     try:
-        runtime.store.save_provider(public, actor_id=session["user"]["id"], expected=record)
+        await runtime.work.run(
+            runtime.store.save_provider, public, actor_id=session["user"]["id"], expected=record
+        )
     except ValueError:
         raise HTTPException(409, "配置已变化，请重新同步") from None
-    runtime.refresh()
+    await runtime.work.run(runtime.refresh)
     return {
         "verified_engines": engines,
         "evidence": evidence,
@@ -683,13 +764,14 @@ async def sync_provider_engines(name: str, session=Depends(administrator), runti
 
 @router.post("/search")
 async def search(data: SearchRequest, session=Depends(current_session), runtime=Depends(get_runtime)):
-    active = runtime.active_names()
+    usage_user.set(session["user"]["id"])
+    smart = runtime.app.state.smart_search
+    active = {p["name"] for p in smart.provider_snapshot if p["enabled"]}
     if data.search_tool_name != "auto":
         if data.search_tool_name not in active:
             raise HTTPException(403, "搜索服务未启用")
-        record = next(p for p in runtime.store.providers() if p["name"] == data.search_tool_name)
+        record = next(p for p in smart.provider_snapshot if p["name"] == data.search_tool_name)
         started, request_id = time.monotonic(), str(uuid4())
-        smart = runtime.app.state.smart_search
         attempt = {
             "provider": data.search_tool_name,
             "status": "unavailable",
@@ -701,7 +783,7 @@ async def search(data: SearchRequest, session=Depends(current_session), runtime=
         }
         try:
             result = await asyncio.wait_for(
-                runtime.app.state.smart_search.call(
+                smart.call(
                     search_tool_name=data.search_tool_name,
                     query=data.query,
                     max_results=data.max_results,
@@ -730,13 +812,16 @@ async def search(data: SearchRequest, session=Depends(current_session), runtime=
                 smart.health.failure(data.search_tool_name, "empty")
             payload = result.model_dump()
             return payload
+        except asyncio.CancelledError:
+            attempt["status"] = "cancelled"
+            raise
         except Exception as error:
             attempt["status"] = failure_category(error)
             smart.health.failure(data.search_tool_name, attempt["status"])
             raise HTTPException(502, "搜索失败：" + failure_category(error)) from None
         finally:
             attempt["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
-            event = smart.telemetry.record_execution(
+            event = await smart.telemetry.arecord_execution(
                 request_id,
                 "explicit",
                 [attempt],
@@ -748,7 +833,7 @@ async def search(data: SearchRequest, session=Depends(current_session), runtime=
             if data.debug and "payload" in locals():
                 payload["debug"] = event
     try:
-        result = await runtime.app.state.smart_search.search(data, active)
+        result = await smart.search(data, active)
         return result.model_dump()
     except SearchFailed as error:
         raise HTTPException(error.status_code, str(error)) from None
@@ -757,12 +842,20 @@ async def search(data: SearchRequest, session=Depends(current_session), runtime=
 @router.get("/keys")
 def keys(
     scope: Literal["mine", "all"] = "mine",
+    limit: int | None = Query(default=None, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    query: str = Query(default="", max_length=100),
+    status: Literal["all", "active", "inactive"] = "all",
+    sort: Literal["name", "name-desc", "newest"] = "name",
     session=Depends(current_session),
     runtime=Depends(get_runtime),
 ):
     if scope == "all" and session["user"]["role"] != "admin":
         raise HTTPException(403, "需要管理员权限")
-    return {"keys": runtime.store.keys(None if scope == "all" else session["user"]["id"])}
+    data = runtime.store.keys(
+        None if scope == "all" else session["user"]["id"], limit, offset, query, status, sort
+    )
+    return data if limit is not None else {"keys": data}
 
 
 @router.post("/keys")
@@ -794,14 +887,23 @@ def remove_key(
 
 
 @router.get("/users")
-def users(session=Depends(administrator), runtime=Depends(get_runtime)):
-    return {"users": runtime.store.users()}
+def users(
+    limit: int | None = Query(default=None, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    query: str = Query(default="", max_length=100),
+    status: Literal["all", "active", "inactive"] = "all",
+    sort: Literal["name", "name-desc", "newest"] = "name",
+    session=Depends(administrator),
+    runtime=Depends(get_runtime),
+):
+    data = runtime.store.users(limit, offset, query, status, sort)
+    return data if limit is not None else {"users": data}
 
 
 @router.post("/users")
 async def create_user(data: NewUser, session=Depends(administrator), runtime=Depends(get_runtime)):
     try:
-        return await asyncio.to_thread(
+        return await runtime.work.run(
             runtime.store.create_user, data.username, data.password, data.role, session["user"]["id"]
         )
     except sqlite3.IntegrityError:
@@ -829,7 +931,7 @@ async def update_user(
     runtime=Depends(get_runtime),
 ):
     try:
-        return await asyncio.to_thread(
+        return await runtime.work.run(
             runtime.store.update_user,
             user_id,
             data.role,
@@ -847,7 +949,7 @@ async def update_user(
 async def change_password(
     data: PasswordChange, response: Response, session=Depends(current_session), runtime=Depends(get_runtime)
 ):
-    valid = await asyncio.to_thread(
+    valid = await runtime.work.run(
         runtime.store.change_password, session["user"]["id"], data.current_password, data.new_password
     )
     if not valid:
@@ -903,5 +1005,7 @@ def initialize_admin(app, proxy, registry, callback, configured_tools):
     runtime = AdminRuntime(app, proxy, store, registry, callback)
     app.state.admin_runtime = runtime
     runtime.refresh()
-    app.state.smart_search.telemetry.sink = lambda event: store.record_usage(event, usage_key.get())
+    app.state.smart_search.telemetry.sink = lambda event: store.record_usage(
+        event, usage_key.get(), usage_user.get()
+    )
     return runtime

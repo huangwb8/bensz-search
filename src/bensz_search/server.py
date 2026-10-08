@@ -1,5 +1,6 @@
 """Boot the native LiteLLM proxy and install the search extension in its lifespan."""
 
+import asyncio
 import logging
 import os
 import tempfile
@@ -12,17 +13,20 @@ import yaml
 from fastapi import Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from litellm.proxy import proxy_server as proxy
 from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.routing import Route
 
 from .admin import initialize_admin, managed_api_auth
 from .admin import router as admin_router
+from .assets import Assets
 from .integration import SearchInputMiddleware, install
 from .mcp_transport import MCPTransport, create_manager
 from .models import SearchResultFeedback
+from .performance import Performance, PerformanceMiddleware, SearchCapacity
 from .protocol import ProtocolFailure
 from .protocol_http import load_team, permission_snapshot
 from .protocol_http import router as protocol_router
@@ -120,10 +124,18 @@ async def lifespan(application):
                         application, proxy, registry, callback, proxy.llm_router.search_tools
                     )
                     proxy.user_custom_auth = managed_api_auth
+                    await asyncio.to_thread(assets.publish, os.getenv("BENSZ_SEARCH_DATA_DIR", "data"))
+                sampler = asyncio.create_task(application.state.performance.sample_loop())
                 application.state.search_mcp = create_manager()
                 async with application.state.search_mcp.run():
                     yield state
             finally:
+                if "sampler" in locals():
+                    sampler.cancel()
+                    await asyncio.gather(sampler, return_exceptions=True)
+                await application.state.smart_search.telemetry.work.close()
+                if runtime:
+                    await runtime.work.close()
                 proxy.llm_router.asearch = original
                 litellm.callbacks.remove(callback)
                 proxy.user_custom_auth = old_auth
@@ -131,7 +143,7 @@ async def lifespan(application):
                 if lease:
                     lease.retire()
                 if runtime:
-                    runtime.store.close()
+                    await asyncio.to_thread(runtime.store.close)
                 application.state.admin_runtime = None
     finally:
         Path(config_path).unlink(missing_ok=True)
@@ -144,7 +156,13 @@ async def lifespan(application):
 app.router.lifespan_context = lifespan
 app.add_middleware(SearchInputMiddleware, default_tool=os.getenv("BENSZ_SEARCH_DEFAULT_TOOL", "auto"))
 
+app.state.search_capacity = SearchCapacity()
+app.state.performance = Performance()
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+app.add_middleware(PerformanceMiddleware, state=app.state)
 static_path = Path(__file__).parent / "static"
+assets = Assets(static_path)
+app.mount("/admin/assets", assets, name="admin-assets")
 app.include_router(admin_router)
 app.include_router(protocol_router)
 app.mount("/bensz-search/mcp", MCPTransport(), name="bensz-search-mcp")
@@ -214,7 +232,7 @@ async def favicon():
 @app.get("/app", include_in_schema=False)
 @app.get("/app/", include_in_schema=False)
 async def console():
-    return FileResponse(static_path / "index.html", headers={"Cache-Control": "no-store"})
+    return HTMLResponse(assets.html, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/admin/changelog", include_in_schema=False)

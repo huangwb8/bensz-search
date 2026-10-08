@@ -2,7 +2,7 @@
 
 ## 后台配置
 
-在 **Search API → 添加 Search API** 选择 **OpenAI Web Search**，填写唯一服务名称和 OpenAI API Key。服务地址留空使用 `https://api.openai.com/v1`；兼容网关填写包含 `/v1` 的 API base，网关必须实际支持 Responses API 和内置 `web_search`。不要填写 `/responses` 结尾的完整 endpoint。
+在 **搜索引擎 → 添加 Search API** 选择 **OpenAI Web Search**，填写唯一服务名称和 OpenAI API Key。服务地址留空使用 `https://api.openai.com/v1`；兼容网关填写包含 `/v1` 的 API base，网关必须实际支持 Responses API 和内置 `web_search`。不要填写 `/responses` 结尾的完整 endpoint。
 
 默认模型 `gpt-4.1-mini`。可以填写账号有权限且支持 `web_search` 的其他 OpenAI 模型；模型名字不保证账号可访问。搜索上下文为 low/medium/high，默认 medium；输出上限默认 2048 token，可配置 128–8192。建议超时 30000ms，复杂查询可增至 60000ms。保存后点击 **测试**，确认返回真实标题和链接，再启用自动路由。
 

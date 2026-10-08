@@ -353,7 +353,7 @@ async def search(router, request, allowed, limits=None, context=None):
                 "message": "Only declared calls were attempted; discover and replan missing coverage",
             }
         )
-    router.telemetry.record_execution(
+    await router.telemetry.arecord_execution(
         envelope.request_id,
         "protocol",
         [
@@ -376,10 +376,11 @@ async def search(router, request, allowed, limits=None, context=None):
         ["Caller supplied plan" if request.mode == "planned" else "Rule based protocol routing"],
     )
     # No query or external content is copied into process-local metrics/logs.
-    router.telemetry.counts["protocol:requests"] += 1
-    router.telemetry.counts["protocol:" + envelope.status] += 1
-    for attempt in attempts:
-        router.telemetry.counts["protocol:call:" + attempt["status"]] += 1
+    with router.telemetry.lock:
+        router.telemetry.counts["protocol:requests"] += 1
+        router.telemetry.counts["protocol:" + envelope.status] += 1
+        for attempt in attempts:
+            router.telemetry.counts["protocol:call:" + attempt["status"]] += 1
     while len(envelope.model_dump_json().encode()) > limits.max_response_bytes and envelope.results:
         if not envelope.truncated:
             envelope.warnings.append(

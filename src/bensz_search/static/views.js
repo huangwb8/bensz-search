@@ -1,16 +1,17 @@
-import { t } from "./i18n.js";
+import { t, site } from "./i18n.js";
 import { html, fmt, money, date, time, label, badge, button, empty, panel, body, table, field, formError, options, more, results, timeline, brand } from './ui.js';
 export const adminPages = {
-  overview: [t("copy.17826325a8"), t("copy.e453d0e532")], providers: ['Search API', t("copy.fad1bb4a41")],
-  search: [t("copy.7bc3f12944"), t("copy.3c64829b3a")], keys: [t("copy.d497c15b0c"), t("copy.a5ed694c84")],
-  users: [t("copy.fbf413d429"), t("copy.b25cfe77f2")], audit: [t("copy.a0f79e91f1"), t("copy.99c5f7bf43")],
+  overview: ["copy.17826325a8", "copy.e453d0e532"], providers: ['nav.providers', "copy.fad1bb4a41"],
+  search: ["copy.7bc3f12944", "copy.3c64829b3a"], keys: ["copy.d497c15b0c", "copy.a5ed694c84"],
+  users: ["copy.fbf413d429", "copy.b25cfe77f2"], audit: ["copy.a0f79e91f1", "copy.99c5f7bf43"],
+  system: ['system.title', 'system.description'],
 };
 export const userPages = {
-  overview: [t("copy.af807bc3f5"), t("copy.47079f22ef")], search: [t("copy.44ce7ae909"), t("copy.1f224bfc43")],
-  keys: [t("copy.871d639f51"), t("copy.806832503e")], settings: [t("copy.5ce662ac8d"), t("copy.1f5bc94035")],
-  integration: [t("copy.c99aba06fb"), t("copy.236b07ee48")], help: [t("copy.ff0d31688b"), t("copy.91877764ac")],
+  overview: ["copy.af807bc3f5", "copy.47079f22ef"], search: ["copy.44ce7ae909", "copy.1f224bfc43"],
+  keys: ["copy.871d639f51", "copy.806832503e"], settings: ["copy.5ce662ac8d", "copy.1f5bc94035"],
+  integration: ["copy.c99aba06fb", "copy.236b07ee48"], help: ["copy.ff0d31688b", "copy.91877764ac"],
 };
-export const pageInfo = state => (state.area === 'admin' ? adminPages : userPages)[state.page] || userPages.help;
+export const pageInfo = state => ((state.area === 'admin' ? adminPages : userPages)[state.page] || userPages.help).map(key => t(key));
 export function head(state, actions = html``) {
   const [title, description] = pageInfo(state);
   return html`<div class="page-head"><div><h1 tabindex="-1" data-testid="page-title">${title}</h1><p>${description}</p></div><div class="actions">${actions}</div></div>`;
@@ -24,7 +25,7 @@ export function loginView() {
     <div class="search-flow" aria-label="${t("copy.9e9791de22")}"><span>${t("copy.531e8593b5")}</span><span aria-hidden="true">→</span><span>${t("copy.5ce6704c0c")}</span><span aria-hidden="true">→</span><span>${t("copy.d77d6bac20")}</span></div>
     <p class="flow-caption">${t("copy.d908b26348")}</p></section><section class="login-main" aria-labelledby="login-title">
     <form id="login-form" class="login-form" data-testid="login-form">
-      <p class="eyebrow">YOUR SEARCH WORKSPACE</p><h2 id="login-title">${t("copy.e64e5ddd50")}</h2><p class="intro">${t("copy.9ed060845e")}</p>
+      <p class="eyebrow">YOUR SEARCH WORKSPACE</p><h2 id="login-title">${t("copy.e64e5ddd50")}</h2><p class="intro">${site.site_subtitle}</p>
     ${formError()}${field('username', t("account.username"), '', { required: true, maxlength: 64, autocomplete: 'username' })}
     ${field('password', t("account.password"), '', { type: 'password', required: true, autocomplete: 'current-password' })}<button class="btn primary" type="submit">${t("copy.e129ac5387")}</button>
     <p class="login-footer">${t("copy.8f7937fed7")}<br>${t("copy.c8fd10f00b")}</p></form><p class="login-help">${t("copy.80276ff350")}</p></section></main>
@@ -38,7 +39,7 @@ export function shell(state) {
   const isAdmin = state.user.role === 'admin';
   const groups = isAdmin ? [['admin', t("copy.e19796712f"), adminPages], ['user', t("copy.0d0e1a86b3"), userPages]] : [['user', t("copy.0d0e1a86b3"), userPages]];
   const navigation = ([area, title, pages]) => html`<nav class="workspace-nav-list" id="nav-${area}" aria-label="${title}${t("copy.88b7692bf5")}">${Object.entries(pages).map(([page, info]) => html`<a class="workspace-nav-link" href="${area === 'admin' ? '/admin/' : '/app/'}#${page}"
-    data-action="navigate" data-page="${page}" data-area="${area}" data-testid="nav-${area}-${page}"><span>${info[0]}</span><span class="nav-chevron" aria-hidden="true">›</span></a>`)}</nav>`;
+    data-action="navigate" data-page="${page}" data-area="${area}" data-testid="nav-${area}-${page}"><span>${t(info[0])}</span><span class="nav-chevron" aria-hidden="true">›</span></a>`)}</nav>`;
   return html`<div class="layout"><button class="nav-backdrop" data-action="menu-close" aria-label="${t("copy.baf9f5c82a")}" hidden></button><aside class="sidebar">
     <div class="sidebar-header"><a class="brand" href="/" aria-label="${t("copy.b32942325e")}">${brand(true)}</a>${button(t("copy.4ce4cafdd0"), 'menu', '', 'menu-toggle')}</div>
     <div class="nav" id="navigation">${groups.map(group => isAdmin ? html`<section class="workspace-nav-group">
@@ -95,6 +96,13 @@ function trend(data) {
         <text x="${center}" y="148" text-anchor="middle">${String(row.day || row.date || '').slice(5)}</text></g>`;
     })}</svg></div>`;
 }
+function providerUsage(metrics) {
+  const percentile = value => value == null ? t('copy.b336a174cd') : fmt(value);
+  return (metrics.by_provider || []).length ? table(t("copy.18fbba0bfc"), [t("copy.ec309ab207"), t("copy.393e124155"), t("copy.47d2ca1352"), 'p50 / p95', t("copy.dd4e402aba"), t('copy.6320b4a872')], metrics.by_provider.map(row => [
+    row.name || row.provider, fmt(row.requests), `${fmt((row.success_rate || 0) * 100)}%`, `${percentile(row.p50_ms)} / ${percentile(row.p95_ms)} ms`, money(row.estimated_cost_usd),
+    html`${Object.entries(row.statuses || {}).map(([status, count]) => badge(status, `${label(status)} · ${fmt(count)}`))}`,
+  ])) : empty(t("copy.a3a0d4790f"), t("copy.3139e36fe0"));
+}
 export function overview(state) {
   const data = state.overview || {};
   if (state.area !== 'admin') return userOverview(state);
@@ -107,32 +115,35 @@ export function overview(state) {
     [t("copy.08a60e40fe"), `${percentile(summary.p50_ms)} / ${percentile(summary.p95_ms)} ms`], [t("copy.dd4e402aba"), money(summary.estimated_cost_usd)], [t("copy.f44a57bc6b"), fmt(summary.fallbacks)],
     [t("copy.c5b8203200"), `${(data.health || state.providers.map(p => p.health)).filter(h => h?.state === 'healthy').length} / ${fmt(data.enabled_count)}`] ];
   return html`${head(state, html`${field('metrics-window', t("copy.1888476e9c"), state.window, { choices: [['process', t("copy.09e161129a")], ['7d', t("copy.2261b06712")], ['30d', t("copy.f729bb3d3f")]] })}${button(t("copy.0468ee76ee"), 'refresh')}`)}
-    <p class="section-foot" data-testid="metric-scope">${t("copy.1d9f798f57")}${scope}${t("copy.973237a7e9")}</p>
+    <div data-section="overview-content"><p class="section-foot" data-testid="metric-scope">${t("copy.1d9f798f57")}${scope}${t("copy.973237a7e9")}</p>
     <div class="stats">${stats.map(([name, value]) => html`<div class="stat"><div class="stat-label">${name}</div><div class="stat-value">${value}</div><div class="stat-note">${scope}</div></div>`)}</div>
     ${panel(t("copy.7b3c22fb10"), body(trend(metrics.trend || [])))}
-    ${panel(t("copy.ac263d5b8d"), (metrics.by_provider || []).length ? table(t("copy.18fbba0bfc"), [t("copy.ec309ab207"), t("copy.393e124155"), t("copy.47d2ca1352"), 'p50 / p95', t("copy.dd4e402aba"), t('copy.6320b4a872')], metrics.by_provider.map(row => [
-      row.name || row.provider, fmt(row.requests), `${fmt((row.success_rate || 0) * 100)}%`, `${percentile(row.p50_ms)} / ${percentile(row.p95_ms)} ms`, money(row.estimated_cost_usd),
-      html`${Object.entries(row.statuses || {}).map(([status, count]) => badge(status, `${label(status)} · ${fmt(count)}`))}`,
-    ])) : empty(t("copy.a3a0d4790f"), t("copy.3139e36fe0")))}
+    ${panel(t("copy.ac263d5b8d"), providerUsage(metrics))}
     ${panel(t("copy.9eb591385b"), providerTable(state, false), button(t("copy.2a3c31eec8"), 'go', 'providers'))}
     ${data.enabled_count ? html`<details class="setup-summary"><summary>${t("copy.8ef82190ff")}</summary><p>${t("copy.6fb5599e5b")}</p></details>`
       : panel(t("copy.715ee9dc84"), body(html`<ol class="steps"><li>${t("copy.6b06f489fc")}</li><li>${t("copy.affc127607")}</li><li>${t("copy.2990af3788")}</li></ol>`), button(t("copy.6f760cbd09"), 'go', 'providers'))}
     ${panel(t("copy.90c70831c0"), recent.length ? table(t("copy.b2bb2616bc"), [t("copy.12da486580"), t("copy.8b6ff49851"), t("copy.f974f65262"), t("copy.bb7ef73495"), t("copy.6320b4a872")], recent.map(row => [
       html`<button class="request-link" data-action="request-detail" data-value="${row.request_id}">${row.request_id}</button>`, time(row.timestamp),
       html`${label(row.intent)}<span class="cell-sub">${(row.providers || []).join(' / ')}</span>`, fmt(row.result_count), html`${(row.attempts || []).map(a => badge(a.status))}`,
-    ])) : empty(t("copy.a380125a40"), t("copy.62231dad05")), badge('unknown', t("copy.6a5b25b58e")))}`;
+    ])) : empty(t("copy.a380125a40"), t("copy.62231dad05")), badge('unknown', t("copy.6a5b25b58e")))}</div>`;
 }
 function userOverview(state) {
   const providers = state.providers.filter(p => p.enabled);
-  return html`${head(state, button(t("copy.0468ee76ee"), 'refresh'))}<section class="personal-welcome"><div><h2>${t("copy.707f709afb")}${state.user.username}。</h2><p>${t("copy.5c988cba47")}</p></div>
+  const metrics = state.data.usage || {};
+  const summary = metrics.summary || {};
+  return html`${head(state, html`${field('user-metrics-window', t("copy.1888476e9c"), state.userWindow, { choices: [['7d', t("copy.2261b06712")], ['30d', t("copy.f729bb3d3f")]] })}${button(t("copy.0468ee76ee"), 'refresh')}`)}<section class="personal-welcome"><div><h2>${t("copy.707f709afb")}${state.user.username}。</h2><p>${t("copy.5c988cba47")}</p></div>
     <div class="personal-actions">${button(t("copy.bdceb7de57"), 'go', 'search', 'primary')}${button(t("copy.871d639f51"), 'go', 'keys')}</div></section>
-    <div class="stats personal-stats">${[[t("copy.f44b6983bb"), providers.length], [t("copy.46638f6bd7"), (state.data.keys || []).filter(k => !k.revoked && (!k.expires_at || k.expires_at > Date.now() / 1000)).length]]
-      .map(([name, value]) => html`<div class="stat"><span class="stat-label">${name}</span><div class="stat-value">${fmt(value)}</div></div>`)}</div>
+    <div data-section="overview-content"><div class="stats personal-stats">${[[t("copy.f44b6983bb"), fmt(providers.length)], [t("copy.46638f6bd7"), fmt(state.data.active_count ?? (state.data.keys || []).filter(k => !k.revoked && (!k.expires_at || k.expires_at > Date.now() / 1000)).length)],
+      [t("copy.855754c132"), fmt(summary.requests)], [t("copy.47d2ca1352"), summary.success_rate == null ? t("copy.b336a174cd") : `${fmt(summary.success_rate * 100)}%`]]
+      .map(([name, value]) => html`<div class="stat"><span class="stat-label">${name}</span><div class="stat-value">${value}</div></div>`)}</div>
+    <p class="section-foot" data-testid="personal-metric-scope">${t('usage.personalScope', { days: state.userWindow === '30d' ? 30 : 7 })}</p>
+    ${panel(t("copy.7b3c22fb10"), body(trend(metrics.trend || [])))}
+    <div data-testid="personal-provider-usage">${panel(t('usage.providers'), providerUsage(metrics))}</div>
     ${panel(t("copy.a7385cfb13"), providers.length ? table(t("copy.36e873f5f1"), [t("copy.d44e9b3d3b"), t("copy.ba40014ff4")], providers.map(p => [p.name, p.provider])) : empty(t("copy.9c82245255"), t("copy.4d1b8188b0")))}
-    ${panel(t("copy.b3f3b88611"), body(html`<p>${t("copy.eebbf79268")}</p>`), button(t("copy.ab9d79a79e"), 'go', 'integration'))}`;
+    ${panel(t("copy.b3f3b88611"), body(html`<p>${t("copy.eebbf79268")}</p>`), button(t("copy.ab9d79a79e"), 'go', 'integration'))}</div>`;
 }
 export function providers(state) {
-  return html`${head(state, html`${button(t("copy.429ea3af44"), 'provider-export')}${button(t("copy.b48b651829"), 'provider-import')}${button(t("copy.175a4ae81f"), 'provider-add', '', 'primary')}`)}
+  return html`${head(state, html`${button(t("copy.429ea3af44"), 'provider-export')}${button(t("copy.b48b651829"), 'provider-import')}${button(t("copy.175a4ae81f"), 'provider-add', '', 'primary')}${button(t("copy.0468ee76ee"), 'refresh')}`)}
     ${panel(t("copy.93d583ccb4"), html`${body(toolbar(state))}<div id="table-results" data-testid="providers-table">${providerTable(state)}</div>`, badge('unknown', `${state.providers.length} ${t("copy.af9a620ed1")}`))}
     <div class="note">${t("copy.96aa2de9d5")}</div>`;
 }
@@ -167,7 +178,7 @@ export function searchResults(state) {
     ${panel(t("copy.1f424578b7"), body(timeline(data)))}` : empty(t("copy.ff10104dcd"), t("copy.eda4b442bc"));
 }
 export function keyTable(state) {
-  const records = filtered(state, state.data.keys || []);
+  const records = state.data.limit ? (state.data.keys || []) : filtered(state, state.data.keys || []);
   return records.length ? table(t("copy.72b4ff83ec"), [t("copy.59a646f681"), ...(state.area === 'admin' ? [t("copy.43a7f4b4c5")] : []), t("copy.6320b4a872"), t("copy.7f5b4fde7b"), t("copy.8b6ff49851"), t("copy.ed31fbb483")], records.map(key => {
     const status = key.revoked ? 'revoked' : key.expires_at && key.expires_at <= Date.now() / 1000 ? 'expired' : 'active';
     return [html`<strong>${key.name}</strong><span class="cell-sub mono">${key.prefix}…</span>`, ...(state.area === 'admin' ? [key.username || key.user_id] : []), badge(status),
@@ -176,12 +187,15 @@ export function keyTable(state) {
       more(html`${key.revoked ? '' : button(t("copy.9585b9a120"), 'key-revoke', key.id, 'danger')}${button(t("key.delete"), 'key-delete', key.id, 'danger')}`)];
   })) : empty(t("copy.3c765c8279"), t("copy.97bf50f6e1"));
 }
+function listPagination(state) {
+  return html`<div class="actions" id="list-pagination">${button(t('copy.c9b9ae7a61'), 'list-prev')}${button(t('copy.8a8542f696'), 'list-next')}<span>${Math.floor((state.listOffsets?.[state.page] || 0) / 50) + 1} / ${Math.max(1, Math.ceil((state.data.total || 0) / 50))}</span></div>`;
+}
 export function keys(state) {
-  return html`${head(state, button(t("copy.f0b89fb051"), 'key-create', '', 'primary'))}<div class="note">${t("copy.82e528110f")}</div>
-    ${panel(state.area === 'admin' ? t("copy.2d690759a9") : t("copy.967653efa4"), html`${body(toolbar(state, t("copy.3282a6fbab")))}<div id="table-results" data-testid="keys-table">${keyTable(state)}</div>`)}`;
+  return html`${head(state, html`${button(t("copy.f0b89fb051"), 'key-create', '', 'primary')}${button(t("copy.0468ee76ee"), 'refresh')}`)}<div class="note">${t("copy.82e528110f")}</div>
+    ${panel(state.area === 'admin' ? t("copy.2d690759a9") : t("copy.967653efa4"), html`${body(toolbar(state, t("copy.3282a6fbab")))}<div id="table-results" data-testid="keys-table">${keyTable(state)}</div>`)}${listPagination(state)}`;
 }
 export function userTable(state) {
-  const users = filtered(state, state.data.users || []);
+  const users = state.data.limit ? (state.data.users || []) : filtered(state, state.data.users || []);
   return users.length ? table(t("copy.2b28326c70"), [t("account.username"), t("copy.527d442dc0"), t("copy.07ec86e0f1"), t("copy.ed31fbb483")], users.map(user => [
     html`<strong>${user.username}</strong>${user.id === state.user.id ? badge('unknown', t("copy.1bb1e785ad")) : ''}`,
     html`${label(user.role)} ${badge(user.enabled === false ? 'disabled' : 'active', user.enabled === false ? t("copy.a8c3698b5b") : t("copy.296de0e31f"))}`, time(user.created_at),
@@ -189,7 +203,7 @@ export function userTable(state) {
   ])) : empty(t("copy.656a2b2ccb"), t("copy.425b50f842"));
 }
 export function users(state) {
-  return html`${head(state, button(t("copy.664a80843b"), 'user-create', '', 'primary'))}${panel(t("copy.59fa9c9382"), html`${body(toolbar(state))}<div id="table-results" data-testid="users-table">${userTable(state)}</div>`)}
+  return html`${head(state, html`${button(t("copy.664a80843b"), 'user-create', '', 'primary')}${button(t("copy.0468ee76ee"), 'refresh')}`)}${panel(t("copy.59fa9c9382"), html`${body(toolbar(state))}<div id="table-results" data-testid="users-table">${userTable(state)}</div>`)}${listPagination(state)}
     <div class="note">${t("copy.5a85716094")}</div>`;
 }
 export function audit(state) {
@@ -210,7 +224,36 @@ const auditAction = action => ({
   change_password: t("audit.changePassword"),
   create: t("copy.cde2cd071d"), update: t("copy.3055a035f0"), delete: t("copy.2f9daa8289"), revoke: t("copy.926a50b98e"), 
   login: t("copy.1e2df9c307"), logout: t("copy.498e1d59b4"), import: t("copy.576d81bb06"), sync_engines: t("copy.3339ffdfa0"), revoke_others: t("copy.54a43c4b0e") }[action] || action);
-const auditObject = object => ({ provider: t("copy.9eb591385b"), key: t("copy.81123c56d5"), user: t("copy.0d0e1a86b3"), session: t("copy.a63280253f") }[object] || object);
+const auditObject = object => ({ provider: t("copy.9eb591385b"), key: t("copy.81123c56d5"), user: t("copy.0d0e1a86b3"), session: t("copy.a63280253f"), system_settings: t('system.title') }[object] || object);
+export function system(state) {
+  const settings = state.data.settings;
+  if (!settings) return html`${head(state)}<section class="panel">${empty(t('system.title'), state.loading ? t('copy.f020e4630a') : t('copy.f3f42080d8'))}</section>`;
+  const deployment = state.data.deployment || {};
+  const tab = state.systemTab || 'site';
+  return html`${head(state)}<nav class="actions settings-tabs" aria-label="${t('system.title')}">
+    ${['site', 'appearance', 'security'].map(id => html`<button class="btn ${id === tab ? 'primary' : ''}" data-action="system-tab" data-value="${id}" aria-pressed="${id === tab}" aria-controls="system-${id}">${t('system.' + id)}</button>`)}</nav>
+    <section id="system-site" data-system-section="site" ${tab !== 'site' ? html`hidden` : ''}>${panel(t('system.site'), body(html`<form id="system-form">
+      <p class="muted">${t('system.siteHelp')}</p>${formError()}<div class="grid-two">
+      ${field('site_name', t('system.name'), settings.site_name, { required: true, maxlength: 60 })}
+      ${field('site_subtitle', t('system.subtitle'), settings.site_subtitle, { maxlength: 160 })}
+      ${field('default_language', t('system.language'), settings.default_language, { choices: [['zh-CN', '简体中文'], ['en', 'English']] })}
+      ${field('doc_url', t('system.doc'), settings.doc_url, { type: 'url', maxlength: 2048 })}
+      ${field('support_url', t('system.support'), settings.support_url, { type: 'url', maxlength: 2048 })}</div>
+      <p class="section-foot">${t('system.linksHelp')}</p><div class="form-actions"><span class="muted">${t('system.revision', { revision: settings.revision })}</span>
+      ${button(t('system.reload'), 'refresh')}<button class="btn primary" type="submit">${t('system.save')}</button></div></form>`))}</section>
+    <section id="system-appearance" data-system-section="appearance" ${tab !== 'appearance' ? html`hidden` : ''}>${panel(t('system.appearance'), body(html`<p class="muted">${t('system.appearanceHelp')}</p>
+      ${field('theme', t("copy.0c3421deb8"), state.theme, { choices: [['system', t("copy.217cfe7db1")], ['light', t("copy.aa0819dfc4")], ['dark', t("copy.a6b75d0680")]] })}`))}</section>
+    <section id="system-security" data-system-section="security" ${tab !== 'security' ? html`hidden` : ''}>${panel(t('system.security'), body(html`<p class="muted">${t('system.securityHelp')}</p>
+      ${table(t('system.security'), [t('copy.9634fb0832'), t('copy.4262c45dc7')], [
+        [t('system.version'), deployment.version || '—'], [t('system.registration'), t('system.registrationClosed')],
+        [t('system.session'), t('system.hours', { hours: deployment.session_lifetime_hours || 12 })],
+        [t('system.cookie'), t(deployment.secure_cookies ? 'system.cookieOn' : 'system.cookieOff')],
+        ['Search API', '/search'], [t('copy.51e5109618'), '/bensz-search/v1/search'], ['MCP', '/bensz-search/mcp'],
+        [t('system.scope'), t('system.scopeHelp')],
+      ])}<div class="actions">${button(t('nav.providers'), 'go', 'providers')}${button(t('copy.d497c15b0c'), 'go', 'keys')}
+      <a class="btn" href="/api/docs" target="_blank" rel="noopener noreferrer">${t('copy.0c21997c24')}</a></div>`))}</section>`;
+}
+
 export function settings(state) {
   return html`${head(state)}<div class="grid-two">${panel(t("copy.81ecab649f"), body(html`<form id="password-form">${formError()}
     ${field('current_password', t("copy.a114cfb687"), '', { type: 'password', required: true, autocomplete: 'current-password' })}
@@ -251,6 +294,8 @@ export function help(state) {
   return html`${head(state)}${panel(t("copy.00c94cf632"), body(html`<p>${t("copy.435bd0f89d")}<strong>v${releases.version || state.overview?.version || t("copy.756762e293")}</strong></p>
     <p>${t("copy.65c96cbd07")}</p><div class="actions">
     <a class="btn" href="/api/docs" target="_blank" rel="noopener noreferrer">${t("copy.0c21997c24")}</a>
+    ${site.doc_url ? html`<a class="btn" href="${safeLink(site.doc_url, '/api/docs')}" target="_blank" rel="noopener noreferrer">${t('system.doc')}</a>` : ''}
+    ${site.support_url ? html`<a class="btn" href="${safeLink(site.support_url, '/api/docs')}" target="_blank" rel="noopener noreferrer">${t('system.support')}</a>` : ''}
     <a class="btn" href="${safeLink(releases.documentation_url, 'https://github.com/huangwb8/bensz-search#readme')}" target="_blank" rel="noopener noreferrer">${t("copy.ad308c52e6")}</a>
     <a class="btn" href="${safeLink(releases.changelog_url, 'https://github.com/huangwb8/bensz-search/blob/main/CHANGELOG.md')}" target="_blank" rel="noopener noreferrer">${t("copy.ba27e12286")}</a></div>
     ${releases.update_check === 'unavailable' ? html`<p class="muted">${t('release.unavailable')}</p>` : ''}
@@ -259,4 +304,4 @@ export function help(state) {
 function safeLink(url, fallback) {
   try { const parsed = new URL(url, location.origin); return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : fallback; } catch { return fallback; }
 }
-export const views = { overview, providers, search, keys, users, audit, settings, integration, help };
+export const views = { overview, providers, search, keys, users, audit, settings, system, integration, help };

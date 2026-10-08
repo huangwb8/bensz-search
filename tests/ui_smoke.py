@@ -15,6 +15,8 @@ from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import sync_playwright
 
+from bensz_search.settings import DEFAULT_SITE
+
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "src/bensz_search/static"
 
@@ -113,6 +115,12 @@ def fixtures():
             "recent": [event],
         },
     }
+    personal_usage = {
+        "summary": {**summary, "requests": 3},
+        "by_provider": [{"name": "web-search", **summary, "requests": 3, "statuses": {"success": 3}}],
+        "trend": [{"day": "2026-10-07", "requests": 3}],
+        "recent": [],
+    }
     keys = [
         {
             "id": "key-fixture",
@@ -171,12 +179,14 @@ def run(args):
         browser = p.chromium.launch(**launch)
         for width, height, name in [(1440, 900, "desktop"), (1024, 768, "tablet"), (390, 844, "mobile")]:
             data = fixtures()
+            data["settings"] = {**DEFAULT_SITE, "revision": 0}
             control = {
                 "authenticated": False,
                 "expire_once": False,
                 "error": False,
                 "empty": False,
                 "calls": [],
+                "usage_days": [],
             }
             page = browser.new_page(viewport={"width": width, "height": height}, reduced_motion="reduce")
             page.on("pageerror", lambda error: report["errors"].append(str(error)))
@@ -212,15 +222,45 @@ def run(args):
                             "body": request.post_data_json if request.post_data else None,
                         }
                     )
-                if path in {"/login", "/session"}:
+                if path == "/site":
+                    payload = {key: value for key, value in data["settings"].items() if key != "revision"}
+                elif path == "/settings" and method == "GET":
+                    payload = {
+                        "settings": data["settings"],
+                        "deployment": {
+                            "version": "1.0.5",
+                            "session_lifetime_hours": 12,
+                            "secure_cookies": False,
+                        },
+                    }
+                elif path == "/settings" and method == "PUT":
+                    fields = request.post_data_json
+                    if fields.pop("expected_revision") != data["settings"]["revision"]:
+                        route.fulfill(
+                            status=409, json={"detail": "系统设置已被其他管理员更新，请重新加载后保存"}
+                        )
+                        return
+                    data["settings"] = {**fields, "revision": data["settings"]["revision"] + 1}
+                    payload = data["settings"]
+                elif path in {"/login", "/session"}:
                     control["authenticated"] = True
                     payload = {
                         "user": data["user"],
                         "csrf_token": "synthetic",
                         "expires_at": time.time() + 12 * 3600,
                     }
+                elif path == "/workspace":
+                    payload = {
+                        k: data["overview"][k]
+                        for k in ("version", "providers", "enabled_count", "configured_count")
+                    }
+                elif path.startswith("/requests/"):
+                    payload = data["overview"]["metrics"]["recent"][0]
                 elif path == "/overview":
                     payload = data["overview"]
+                elif path == "/usage/me":
+                    control["usage_days"].append(parse_qs(urlsplit(request.url).query)["days"][0])
+                    payload = data["personal_usage"]
                 elif path == "/providers" and method == "GET":
                     payload = {
                         "providers": [] if control["empty"] else data["providers"],
@@ -253,7 +293,18 @@ def run(args):
                 elif path == "/keys" and method == "POST":
                     payload = {"key": "synthetic-key-not-a-credential"}
                 elif path == "/keys":
-                    payload = {"keys": data["keys"]}
+                    params = parse_qs(urlsplit(request.url).query)
+                    offset, limit = int(params.get("offset", [0])[0]), int(params.get("limit", [200])[0])
+                    payload = {
+                        "keys": data["keys"][offset : offset + limit],
+                        "total": len(data["keys"]),
+                        "limit": limit,
+                        "active_count": sum(
+                            not k.get("revoked")
+                            and (not k.get("expires_at") or k["expires_at"] > time.time())
+                            for k in data["keys"]
+                        ),
+                    }
                 elif path.startswith("/keys/") and method == "DELETE":
                     key_id = path.removeprefix("/keys/")
                     if parse_qs(urlsplit(request.url).query).get("permanent") == ["true"]:
@@ -264,7 +315,7 @@ def run(args):
                                 key["revoked"] = True
                     payload = {"ok": True}
                 elif path == "/users":
-                    payload = {"users": data["users"]}
+                    payload = {"users": data["users"], "total": len(data["users"]), "limit": 50}
                 elif path == "/audit":
                     payload = {
                         "events": [
@@ -314,7 +365,9 @@ def run(args):
                     page.locator('[data-action="menu"]').click()
                 link.click()
                 page.locator('[data-testid="page-title"]').wait_for()
-                page.locator(".skeleton").wait_for(state="hidden")
+                page.wait_for_function(
+                    "() => document.querySelector('#load-status')?.getAttribute('aria-busy') !== 'true'"
+                )
                 assert page.locator("#app-version").inner_text() == "v1.0.5"
 
             def delete_key(key_id, global_scope=False, page=page, control=control):
@@ -345,10 +398,11 @@ def run(args):
             page.locator('#login-form button[type="submit"]').click()
             page.locator('[data-testid="page-title"]').wait_for()
             assert page.locator("#app-version").inner_text() == "v1.0.5"
+            page.locator(".trend-bar").first.wait_for()
             assert page.locator(".trend-bar").count() == 2
             if width > 720:
                 assert page.locator('[data-action="menu"]').is_hidden()
-            assert page.locator("nav#nav-admin a").count() == 6
+            assert page.locator("nav#nav-admin a").count() == 7
             assert page.locator("nav#nav-user a").count() == 6
             if width <= 720:
                 page.locator('[data-action="menu"]').click()
@@ -375,12 +429,67 @@ def run(args):
             for bad in ["constructor", "__proto__", "toString"]:
                 page.evaluate("bad => history.pushState(null, '', '/admin/#' + bad)", bad)
                 page.evaluate("dispatchEvent(new PopStateEvent('popstate'))")
-                page.locator(".skeleton").wait_for(state="hidden")
+                page.wait_for_function(
+                    "() => document.querySelector('#load-status')?.getAttribute('aria-busy') !== 'true'"
+                )
                 assert page.locator('[data-testid="page-title"]').inner_text() == "运行概览"
             page.locator('[data-action="request-detail"]').click()
+            page.locator(".timeline").wait_for()
             assert page.locator(".timeline").is_visible()
             shot("request")
             page.locator('#dialog [data-action="dialog-close"]').click()
+            navigate("admin", "system")
+            assert page.locator('[data-testid="page-title"]').inner_text() == "系统设置"
+            assert (
+                page.locator('[data-testid="nav-admin-providers"]').inner_text().strip("› \n") == "搜索引擎"
+            )
+            assert "搜索调试台" not in page.locator("#nav-admin").inner_text()
+            assert "管理员密钥" in page.locator("#nav-admin").inner_text()
+            page.fill("#site-name", "搜索中心")
+            page.locator('[data-action="system-tab"][data-value="appearance"]').click()
+            page.select_option("#theme", "dark")
+            assert page.evaluate("document.documentElement.dataset.theme") == "dark"
+            shot("system-appearance")
+            page.locator('[data-action="system-tab"][data-value="security"]').click()
+            assert "/bensz-search/mcp" in page.locator("#system-security").inner_text()
+            shot("system-security")
+            page.locator('[data-action="system-tab"][data-value="site"]').click()
+            assert page.input_value("#site-name") == "搜索中心"
+            page.fill("#doc-url", "https://docs.example.org")
+            page.locator('#system-form button[type="submit"]').click()
+            page.wait_for_function("() => document.querySelector('#system-form').textContent.includes('r1')")
+            assert page.title() == "系统设置 · 搜索中心"
+            shot("system-site")
+            page.fill("#site-name", "保留草稿")
+            data["settings"]["revision"] = 2
+            page.locator('#system-form button[type="submit"]').click()
+            page.locator("#system-form .form-error").filter(has_text="其他管理员").wait_for()
+            assert page.input_value("#site-name") == "保留草稿"
+            page.once("dialog", lambda dialog: dialog.accept())
+            page.locator('#system-form [data-action="refresh"]').click()
+            page.wait_for_function("() => document.querySelector('#system-form').textContent.includes('r2')")
+            assert page.input_value("#site-name") == "搜索中心"
+            page.locator('[data-action="system-tab"][data-value="appearance"]').click()
+            page.select_option("#theme", "light")
+            if args.system_only:
+                report["viewports"].append(
+                    {
+                        "name": name,
+                        "width": width,
+                        "height": height,
+                        "checks": [
+                            "renamed navigation",
+                            "settings tabs and draft preservation",
+                            "browser theme",
+                            "save and brand update",
+                            "revision conflict and reload",
+                            "deployment status",
+                            "no horizontal overflow",
+                        ],
+                    }
+                )
+                page.close()
+                continue
             for area, target in [
                 ("admin", "providers"),
                 ("admin", "keys"),
@@ -503,15 +612,20 @@ def run(args):
             page.on("dialog", accept_unsaved)
             navigate("admin", "providers")
             page.remove_listener("dialog", accept_unsaved)
+            page.locator('[data-action="refresh"]').first.click()
+            page.wait_for_function(
+                "() => document.querySelector('#load-status')?.getAttribute('aria-busy') !== 'true'"
+            )
             shot("empty")
             control["empty"] = False
             navigate("admin", "users")
             control["error"] = True
             navigate("admin", "providers")
-            page.get_by_text("无法加载", exact=True).wait_for()
+            page.locator('[data-action="refresh"]').first.click()
+            page.locator("#load-status").get_by_text("服务暂时不可用，请稍后重试。", exact=False).wait_for()
             shot("error")
             control["error"] = False
-            page.locator('[data-action="refresh"]').click()
+            page.locator('[data-action="refresh"]').first.click()
             page.locator('[data-testid="providers-table"]').wait_for()
             page.locator('[data-action="logout"]').click()
             page.locator("#login-form").wait_for()
@@ -519,11 +633,15 @@ def run(args):
             page.fill("#username", "demo")
             page.fill("#password", "synthetic-password")
             page.locator('#login-form button[type="submit"]').click()
-            page.locator(".skeleton").wait_for(state="hidden")
+            page.wait_for_function(
+                "() => document.querySelector('#load-status')?.getAttribute('aria-busy') !== 'true'"
+            )
             for bad in ["constructor", "__proto__", "toString"]:
                 page.evaluate("bad => history.pushState(null, '', '/app/#' + bad)", bad)
                 page.evaluate("dispatchEvent(new PopStateEvent('popstate'))")
-                page.locator(".skeleton").wait_for(state="hidden")
+                page.wait_for_function(
+                    "() => document.querySelector('#load-status')?.getAttribute('aria-busy') !== 'true'"
+                )
                 assert page.locator('[data-testid="page-title"]').inner_text() == "我的工作台"
             if width <= 720:
                 page.locator('[data-action="menu"]').click()
@@ -537,6 +655,20 @@ def run(args):
             shot("member-navigation")
             if width <= 720:
                 page.keyboard.press("Escape")
+            usage = page.locator('[data-testid="personal-provider-usage"]')
+            assert usage.get_by_text("web-search", exact=True).count() == 1
+            assert usage.get_by_text("local-search", exact=True).count() == 0
+            assert page.locator('[name="user-metrics-window"]').input_value() == "7d"
+            page.select_option('[name="user-metrics-window"]', "30d")
+            page.locator('[data-testid="personal-metric-scope"]').get_by_text("近 30", exact=False).wait_for()
+            assert control["usage_days"][-1] == "30"
+            shot("member-usage-30d")
+            saved_usage = data["personal_usage"]
+            data["personal_usage"] = {"summary": {"requests": 0}, "by_provider": [], "trend": []}
+            page.locator('[data-action="refresh"]').first.click()
+            usage.get_by_text("暂无服务统计", exact=True).wait_for()
+            shot("member-usage-empty")
+            data["personal_usage"] = saved_usage
             navigate("user", "keys")
             delete_key("old-key")
             assert page.locator('[data-action="key-delete"]').count() == 0
@@ -570,6 +702,7 @@ def run(args):
                         "cancelled navigation restores URL",
                         "session refresh preserves password form",
                         "cross-area brand version",
+                        "personal provider usage, 7/30 day selection and empty state",
                     ],
                 }
             )
@@ -584,6 +717,9 @@ def run(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--system-only", action="store_true", help="Run the system settings checks in all three viewports"
+    )
     default_browser = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     parser.add_argument("--browser", default=default_browser if Path(default_browser).exists() else None)
     run(parser.parse_args())

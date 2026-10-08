@@ -7,7 +7,7 @@
 
 基于 LiteLLM 1.103.2 的独立扩展，不修改 upstream 源码。管理员连接搜索源、测试服务并管理用户；成员在个人工作台搜索并创建应用访问密钥。自动搜索按任务和约束选择服务，处理超时、fallback、去重和 weighted RRF 融合。外部 AI 可先发现能力，再提交逐引擎查询计划。
 
-当前发布 `v1.0.8`；官方镜像为 [`huangwb8/bensz-search:1.0.8`](https://hub.docker.com/r/huangwb8/bensz-search)，仅 `linux/amd64`，同时提供 `latest`。首次部署需要配置可用搜索源；商业服务需要自己的 API Key。
+当前发布 `v1.0.9`；官方镜像为 [`huangwb8/bensz-search:1.0.9`](https://hub.docker.com/r/huangwb8/bensz-search)，仅 `linux/amd64`，同时提供 `latest`。首次部署需要配置可用搜索源；商业服务需要自己的 API Key。
 
 ## 快速开始
 
@@ -27,10 +27,12 @@ curl --noproxy '*' http://127.0.0.1:8898/ready
 
 | 工作区 | 入口 | 能力 |
 |---|---|---|
-| 管理员后台 | `/admin` | 全局概览、Search API 配置与真实测试、用户与全体密钥管理、审计和搜索 |
-| 用户工作台 | `/app` | 可用来源和个人密钥概览、搜索、接入指南、账号设置 |
+| 管理员后台 | `/admin` | 全局概览、搜索引擎配置与真实测试、用户与管理员密钥管理、审计、搜索调试和[系统设置](docs/smart-search-router/system-settings.md) |
+| 用户工作台 | `/app` | 可用来源和个人密钥概览、近 7/30 天各引擎个人用量与趋势、搜索、接入指南、账号设置 |
 
 管理员侧栏保留“管理员 / 用户”两个可折叠分组，组内菜单缩进并以浅色层级线提示；成员直接显示平级个人菜单。页面支持刷新与浏览器前进后退，左上角产品名下方显示运行版本，移动端保持可用。角色和密钥归属由服务端校验。
+
+**v1.0.9** 加入页面资源缓存与分区加载、SQLite/用量写入线程卸载、搜索容量控制及密钥/用户分页，减少管理页面在搜索期间的同步等待；同时提供个人用量趋势和可持久化的系统设置。性能数字来自隔离实验，测试条件和结果见[性能实现与验证](docs/smart-search-router/performance-implementation.md)。
 
 **v1.0.8** 提升后台与用户工作区的可读性：正文和输入控件为 16 px，导航与表格为 15 px，标签为 14 px，并统一行高和文字对比度；页面标题和控件高度保持一致。
 
@@ -84,13 +86,13 @@ docker compose -f docs/deploy/compose.yaml up -d --build --wait
 docker compose -f docs/deploy/compose.yaml ps
 ```
 
-1.0.5 起自动增量迁移数据库；回退旧镜像须同时恢复升级前的数据库快照。镜像与线上验收见 [v1.0.5 发布记录](docs/deploy/releases/v1.0.5.md)与 [v1.0.8 发布记录](docs/deploy/releases/v1.0.8.md)。
+1.0.5 起自动增量迁移数据库；回退旧镜像须同时恢复升级前的数据库快照。镜像与线上验收见 [v1.0.5 发布记录](docs/deploy/releases/v1.0.5.md)与 [v1.0.9 发布记录](docs/deploy/releases/v1.0.9.md)。
 
 服务器在 `/docker/bensz-search` 先备份旧镜像 ID、Compose、私有配置和 SQLite 数据库，再仅更新搜索服务：
 
 ```bash
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.8 docker compose -f docker-compose.yml pull search
-BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.8 docker compose -f docker-compose.yml up -d --no-deps --wait search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.9 docker compose -f docker-compose.yml pull search
+BENSZ_SEARCH_IMAGE=huangwb8/bensz-search:1.0.9 docker compose -f docker-compose.yml up -d --no-deps --wait search
 ```
 
 容器非 root，限制内存、并发、PID 和日志。当前单机单进程，未验收多实例状态共享。不要用 `down -v` 日常重启。HTTPS 部署启用 Secure Cookie，并只信任实际代理 IP 的转发头。备份、恢复和代理设置见[本地部署](docs/deploy/README.md)和[服务器部署](docs/deploy/server-deployment.md)。

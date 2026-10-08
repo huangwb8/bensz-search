@@ -80,7 +80,7 @@ class SmartRouter:
             plan.fusion,
             request.max_results,
         )
-        event = self.telemetry.record(
+        event = await self.telemetry.arecord(
             request_id,
             task,
             plan,

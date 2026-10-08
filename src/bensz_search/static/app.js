@@ -1,14 +1,27 @@
-import { t } from "./i18n.js";
+import { ResourceCache } from "./cache.js";
+import { t, site, siteReady } from "./i18n.js";
 import { html, fmt, label, button, empty, formError, field, timeline } from './ui.js';
 import { adminPages, userPages, pageInfo, shell, loginView, head, views, providerTable, keyTable, userTable, searchResults, sessionPanel } from './views.js';
 import { providerForm, updateProviderFields, providerPayload, testForm, testResults, keyForm, userForm, importForm, reauthForm } from './forms.js';
 const app = document.getElementById('app');
 const dialog = document.getElementById('dialog');
 const state = { user: null, csrf: '', expiresAt: null, expiryWarned: false, area: 'user', page: 'overview', providers: [], catalog: [], overview: null, data: {},
-  revision: 0, authGeneration: 0, loadRevision: 0, currentURL: '', filters: {}, window: 'process', searchDraft: {}, searchResult: null, tests: {}, auditFilters: {}, auditOffset: 0,
+  revision: 0, authGeneration: 0, loadRevision: 0, currentURL: '', filters: {}, window: 'process', userWindow: '7d', searchDraft: {}, searchResult: null, tests: {}, auditFilters: {}, auditOffset: 0,
   theme: localStorage.getItem('bensz-search-theme') || 'system', menuOpen: false, dialogDirty: false, dirtyForms: new Set(), secret: null, editor: null };
 let opener = null;
 let reauthPending = null;
+const resources = new ResourceCache();
+let subscriptions = [];
+let filterTimer = null;
+function releaseReads() { subscriptions.forEach(item => item.release()); subscriptions = []; }
+function cacheKey(path) { return `${state.authGeneration}:${state.user?.id}:${state.user?.role}:${state.area}:${path}`; }
+function invalidateAfterWrite(path) {
+  const names = path.startsWith('/providers') ? ['/workspace', '/providers', '/overview']
+    : path.startsWith('/keys') ? ['/keys', '/usage/me', '/overview']
+    : path.startsWith('/users') ? ['/users', '/keys', '/usage', '/overview', '/workspace', '/session']
+    : path.startsWith('/settings') ? ['/settings'] : path.startsWith('/sessions') ? ['/sessions'] : path === '/settings' ? ['/settings'] : path === '/search' ? ['/usage', '/overview', '/keys'] : [];
+  resources.invalidate(key => names.some(name => key.includes(':' + name)) || key.includes(':/audit'));
+}
 const get = selector => document.querySelector(selector);
 const setContent = (node, value) => { if (node) node.innerHTML = String(value); };
 const busy = (button, value) => { if (button) { button.disabled = value; button.setAttribute('aria-busy', String(value)); } };
@@ -42,7 +55,7 @@ function friendlyError(data, status) {
     404: t("copy.2638f6f1a5"), 409: t("copy.7b95c4a340"), 422: t("copy.47f3645414"),
     429: t("copy.55b9f76375"), 502: t("copy.0499cdcbb4"), 503: t("copy.9b975432f8") })[status] || t("copy.8977b79aa8");
 }
-async function api(path, method = 'GET', payload, retry = true) {
+async function api(path, method = 'GET', payload, retry = true, options = {}) {
   const generation = state.authGeneration;
   const headers = { Accept: 'application/json' };
   if (payload !== undefined) headers['Content-Type'] = 'application/json';
@@ -50,14 +63,16 @@ async function api(path, method = 'GET', payload, retry = true) {
   let response;
   try {
     response = await fetch(`/admin/api${path}`, { method, credentials: 'same-origin', headers,
-      body: payload === undefined ? undefined : JSON.stringify(payload), signal: AbortSignal.timeout(75000) });
+      body: payload === undefined ? undefined : JSON.stringify(payload), signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeout || (method === 'GET' ? 5000 : 75000))]) : AbortSignal.timeout(options.timeout || (method === 'GET' ? 5000 : 75000)) });
   } catch (error) {
+    if (error.name === "AbortError") throw error;
     throw new Error(error.name === 'TimeoutError' ? t("copy.bb2fa53a1a") : t("copy.e7b068fd04"));
   }
   const data = response.status === 204 ? {} : await response.json().catch(() => ({}));
   if (response.status === 401 && retry && generation === state.authGeneration && state.user && !['/login', '/session'].includes(path)) {
     await reauthenticate();
-    return api(path, method, payload, false);
+    if (generation !== state.authGeneration) throw new DOMException("Identity changed", "AbortError");
+    return api(path, method, payload, false, options);
   }
   if (!response.ok) {
     const error = new Error(friendlyError(data, response.status));
@@ -65,6 +80,7 @@ async function api(path, method = 'GET', payload, retry = true) {
     error.fields = data.errors || (Array.isArray(data.detail) ? data.detail.map(item => ({ field: item.loc?.at(-1), message: t("copy.d05af7799c") })) : []);
     throw error;
   }
+  if (method !== "GET" && generation === state.authGeneration) invalidateAfterWrite(path);
   return data;
 }
 function errorBox(form, error) {
@@ -84,7 +100,11 @@ function errorBox(form, error) {
   form.querySelector('[aria-invalid="true"]')?.focus();
 }
 function rememberSession(data) {
-  if (state.user?.id !== data.user.id) state.authGeneration++;
+  if (state.user?.id !== data.user.id || state.user?.role !== data.user.role) {
+    releaseReads(); resources.clear(); state.authGeneration++;
+    state.providers = []; state.overview = null; state.data = {}; state.providersReady = false;
+    state.searchResult = null; state.searchDraft = {}; state.catalog = []; state.tests = {};
+  } else resources.clear();
   state.user = data.user;
   state.csrf = data.csrf_token;
   state.expiresAt = data.expires_at || data.session?.expires_at || null;
@@ -107,14 +127,15 @@ async function reauthenticate() {
   restoreFocus?.focus();
 }
 function clearPrivateState() {
+  releaseReads(); resources.clear(); clearTimeout(filterTimer); state.providersReady = false;
   state.user = null; state.csrf = ''; state.secret = null; state.overview = null; state.searchResult = null;
   state.searchDraft = {}; state.tests = {}; state.data = {}; state.providers = []; state.catalog = []; state.snippets = {}; state.filters = {};
-  state.auditFilters = {}; state.auditOffset = 0; state.window = 'process'; state.expiresAt = null; state.expiryWarned = false; state.confirmAction = null; state.currentURL = '';
+  state.auditFilters = {}; state.auditOffset = 0; state.listOffsets = {}; state.updated = {}; state.loadErrors = {}; state.window = 'process'; state.expiresAt = null; state.expiryWarned = false; state.confirmAction = null; state.currentURL = '';
   state.menuOpen = false; document.body.classList.remove('menu-open'); state.dirtyForms.clear(); state.dialogDirty = false; state.editor = null;
   state.authGeneration++; state.revision++; closeDialog(true);
   opener = null; setContent(document.getElementById('notice'), html``);
 }
-function login() { setContent(app, loginView()); document.title = t("copy.fecec8e8ae"); get('#username')?.focus(); }
+function login() { setContent(app, loginView()); document.title = `${site.site_name} · ${site.site_subtitle}`; get('#username')?.focus(); }
 function locationState() {
   const [page, query = ''] = location.hash.slice(1).split('?');
   const params = new URLSearchParams(query);
@@ -138,6 +159,7 @@ async function navigate(page, { area = state.area, replace = false, params = new
   const pages = targetArea === 'admin' ? adminPages : userPages;
   if (!Object.hasOwn(pages, page)) page = 'overview';
   captureSearchDraft();
+  releaseReads(); clearTimeout(filterTimer);
   state.dirtyForms.clear(); state.dialogDirty = false;
   closeDialog(true);
   const changeArea = state.area !== targetArea;
@@ -150,20 +172,16 @@ async function navigate(page, { area = state.area, replace = false, params = new
   if (page === 'search' && params.size) state.searchDraft = { ...state.searchDraft, ...Object.fromEntries(params) };
   updateNav(); setMenu(false);
   const revision = ++state.revision;
-  const main = get('#main');
-  setContent(main, html`${head(state)}<div class="skeleton" role="status" aria-label="${t("copy.f020e4630a")}"><div></div><div></div><div></div></div>`);
-  try {
-    const loaded = await loadPage();
-    if (!loaded || state.revision !== revision) return;
-    renderPage(); get('[data-testid="page-title"]')?.focus({ preventScroll: true });
-    window.scrollTo({ top: 0 });
-    if (page === 'providers' && params.get('provider')) openProvider(state.providers.find(p => p.name === params.get('provider')));
-    if (page === 'overview' && params.get('request')) showRequest(params.get('request'));
-  } catch (error) {
-    if (state.revision !== revision) return;
-    setContent(main, html`${head(state)}<section class="panel">${empty(t("copy.f3f42080d8"), error.message)}<div class="panel-body">${button(t("copy.7bdd5ce1e2"), 'refresh')}</div></section>`);
-    notify(error.message, true);
-  }
+  state.data = {}; state.loadErrors = {}; state.updated = {}; state.providersReady = false;
+  state.loading = true;
+  const load = loadPage();
+  renderPage(); get('[data-testid="page-title"]')?.focus({ preventScroll: true });
+  window.scrollTo({ top: 0 });
+  await load;
+  if (state.revision !== revision) return;
+  if (page === 'providers' && params.get('provider')) openProvider(state.providers.find(p => p.name === params.get('provider')));
+  if (page === 'overview' && params.get('request')) showRequest(params.get('request'));
+
 }
 function updateNav() {
   updateVersion();
@@ -173,7 +191,7 @@ function updateNav() {
     if (active) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current');
   });
   const info = pageInfo(state);
-  get('#breadcrumb').textContent = info[0]; document.title = `${info[0]} · bensz-search`;
+  get('#breadcrumb').textContent = info[0]; document.title = `${info[0]} · ${site.site_name}`;
 }
 function updateVersion() {
   const node = get('#app-version');
@@ -183,56 +201,121 @@ function updateVersion() {
   node.title = version ? `${t("copy.6b727b3b96")} ${version}` : t("copy.1ed59e0dde");
   node.setAttribute('aria-label', node.title);
 }
-async function loadPage() {
-  const page = state.page;
-  const area = state.area;
-  const window = state.window;
-  const revision = state.revision;
-  const loadRevision = ++state.loadRevision;
-  const needsOverview = ['overview', 'search'].includes(page) || !state.overview;
-  const overviewPromise = needsOverview ? api(`/overview?window=${window}`) : Promise.resolve(null);
-  let path = null;
-  if (page === 'providers') path = '/providers';
-  if (page === 'keys') path = '/keys' + (area === 'admin' ? '?scope=all' : '');
-  if (page === 'overview' && area === 'user') path = '/keys';
-  if (page === 'users') path = '/users';
-  if (page === 'settings') path = '/sessions';
-  if (page === 'help') path = '/releases';
+function listPath(page) {
+  const filter = state.filters[page] || {};
+  const params = new URLSearchParams({ limit: '50', offset: String(state.listOffsets?.[page] || 0),
+    query: filter.query || '', status: filter.status || 'all', sort: filter.sort || 'name' });
+  if (page === 'keys' && state.area === 'admin') params.set('scope', 'all');
+  return `/${page}?${params}`;
+}
+async function loadPage(force = false) {
+  const page = state.page, area = state.area, revision = state.revision;
+  const generation = state.authGeneration, loadRevision = ++state.loadRevision;
+  const jobs = [];
+  const previous = subscriptions; subscriptions = [];
+  const valid = () => revision === state.revision && generation === state.authGeneration && loadRevision === state.loadRevision;
+  const read = (path, ttl, apply) => {
+    const subscription = resources.subscribe(cacheKey(path), ttl,
+      signal => api(path, 'GET', undefined, true, { signal }), (data, error, updated) => {
+        if (!valid()) return;
+        if (data !== undefined) { apply(data); state.updated[path] = updated; }
+        if (error) state.loadErrors[path] = error.message; else delete state.loadErrors[path];
+        patchPage();
+      }, force);
+    subscriptions.push(subscription); jobs.push(subscription.promise);
+  };
+  if (page === 'overview' && area === 'admin' && state.metricsWindow !== state.window) {
+    state.overview = { ...state.overview, metrics: {} }; state.metricsWindow = state.window;
+  }
+  // This published configuration is enough for forms and the version label.
+  read('/workspace', 30000, data => {
+    state.overview = { ...state.overview, ...data };
+    if (page !== 'providers') state.providers = data.providers || [];
+    state.providersReady = true; updateVersion();
+  });
+  if (page === 'overview' && area === 'admin') read(`/overview?window=${state.window}&compact=true`, 5000, data => {
+    state.metricsWindow = state.window; state.overview = data; state.providers = data.providers || []; updateVersion();
+  });
+  if (page === 'overview' && area === 'user') {
+    if (state.usageWindow !== state.userWindow) { delete state.data.usage; state.usageWindow = state.userWindow; }
+    read('/keys?limit=1&sort=newest', 5000, data => { state.data.keys = data.keys; state.data.active_count = data.active_count; });
+    read(`/usage/me?days=${state.userWindow === '30d' ? 30 : 7}`, 5000, data => { state.data.usage = data; });
+  }
+  if (page === 'providers') read('/providers', 30000, data => { state.providers = data.providers || []; state.catalog = data.catalog || []; });
+  if (['keys', 'users'].includes(page)) read(listPath(page), 5000, data => { Object.assign(state.data, data); });
+  if (page === 'settings') read('/sessions', 5000, data => { state.data = data; });
+  if (page === 'system') read('/settings', 0, data => { state.data = data; });
+  if (page === 'help') read('/releases', 30000, data => { state.data = data; });
   if (page === 'audit') {
     const params = new URLSearchParams({ limit: '50', offset: String(state.auditOffset) });
-    for (const [key, value] of Object.entries(state.auditFilters)) {
-      if (!value) continue;
+    for (const [key, value] of Object.entries(state.auditFilters)) if (value)
       params.set(key, ['since', 'until'].includes(key) ? String(new Date(value).getTime() / 1000) : value);
-    }
-    path = '/audit?' + params;
+    read('/audit?' + params, 5000, data => { state.data = data; });
   }
-  const [overview, data] = await Promise.all([overviewPromise, path ? api(path) : Promise.resolve({})]);
-  if (revision !== state.revision || loadRevision !== state.loadRevision) return false;
-  if (overview) { state.overview = overview; state.providers = overview.providers || []; updateVersion(); }
-  state.data = data;
-  if (page === 'providers') { state.providers = data.providers || []; state.catalog = data.catalog || []; }
-  if (state.overview?.health) state.providers.forEach(provider => { provider.health ||= state.overview.health.find(row => row.name === provider.name); });
+  previous.forEach(item => item.release());
+  await Promise.allSettled(jobs);
+  if (!valid()) return false;
+  state.loading = false; patchPage();
   return true;
 }
-function renderPage() { setContent(get('#main'), views[state.page](state)); }
-async function refresh({ local = true } = {}) {
-  const revision = state.revision;
-  const focus = document.activeElement;
-  const action = focus?.dataset.action;
-  const value = focus?.dataset.value;
-  const scroll = window.scrollY;
-  get('#main')?.setAttribute('aria-busy', 'true');
-  try {
-    const loaded = await loadPage();
-    if (!loaded || revision !== state.revision) return;
-    const renderTable = { providers: providerTable, keys: keyTable, users: userTable }[state.page];
-    if (local && state.page === 'settings' && get('#sessions-panel')) setContent(get('#sessions-panel'), sessionPanel(state));
-    else if (local && renderTable && get('#table-results')) setContent(get('#table-results'), renderTable(state)); else renderPage();
-    window.scrollTo({ top: scroll });
-    const matching = [...document.querySelectorAll('[data-action]')].find(node => node.dataset.action === action && node.dataset.value === value);
-    if (matching) matching.focus({ preventScroll: true }); else if (focus?.isConnected) focus.focus({ preventScroll: true });
-  } finally { get('#main')?.removeAttribute('aria-busy'); }
+function loadStatus() {
+  const errors = Object.values(state.loadErrors || {});
+  const updated = Math.max(0, ...Object.values(state.updated || {}));
+  return html`<div class="section-foot" id="load-status" role="status" aria-busy="${Boolean(state.loading)}">${errors.length ? html`${errors.join(' · ')} ${button(t('copy.7bdd5ce1e2'), 'refresh')}`
+    : state.loading ? t('performance.refreshing') : updated ? t('performance.updated', { time: new Date(updated).toLocaleTimeString() }) : ''}</div>`;
 }
+function renderPage() { setContent(get('#main'), html`${views[state.page](state)}${loadStatus()}`); updateSearchOptions(); updatePagination(); }
+function updateSearchOptions() {
+  const form = get('#search-form');
+  if (!form) return;
+  const select = form.elements.search_tool_name;
+  const selected = state.searchDraft.search_tool_name || select.value || 'auto';
+  select.replaceChildren(...[['auto', t('copy.05275ff656')], ...state.providers.filter(p => p.enabled).map(p => [p.name, p.name])].map(([value, name]) => new Option(name, value, false, selected === value)));
+  if (selected !== 'auto' && !state.providers.some(p => p.name === selected && p.enabled)) {
+    select.value = 'auto'; state.searchDraft.search_tool_name = 'auto';
+  }
+  select.disabled = !state.providersReady;
+  form.querySelector('[type="submit"]').disabled = !state.providersReady;
+}
+function patchPage() {
+  if (!get('#main')) return;
+  if (state.page === 'search') updateSearchOptions();
+  else if (['providers', 'keys', 'users'].includes(state.page) && get('#table-results')) {
+    setContent(get('#table-results'), { providers: providerTable, keys: keyTable, users: userTable }[state.page](state));
+    updatePagination();
+  } else if (state.page === 'settings' && get('#sessions-panel')) setContent(get('#sessions-panel'), sessionPanel(state));
+  else {
+    const template = document.createElement('template'); template.innerHTML = String(views[state.page](state));
+    if (state.page === 'overview') {
+      for (const node of template.content.querySelectorAll('[data-section]')) {
+        const target = get(`[data-section="${node.dataset.section}"]`);
+        if (target) target.innerHTML = node.innerHTML;
+      }
+    } else if (!hasUnsaved()) {
+      const focus = document.activeElement, name = focus?.name, value = focus?.value;
+      renderPage();
+      const replacement = name && [...get('#main').querySelectorAll('[name]')].find(n => n.name === name);
+      if (replacement) { replacement.value = value; replacement.focus({ preventScroll: true }); }
+    }
+  }
+  const status = get('#load-status'); if (status) status.outerHTML = String(loadStatus());
+}
+function updatePagination() {
+  const node = get('#list-pagination');
+  if (node) {
+    const offset = state.listOffsets?.[state.page] || 0, total = state.data.total || 0;
+    node.querySelector('[data-action="list-prev"]').disabled = !offset;
+    node.querySelector('[data-action="list-next"]').disabled = offset + 50 >= total;
+    node.querySelector('span').textContent = `${Math.floor(offset / 50) + 1} / ${Math.max(1, Math.ceil(total / 50))}`;
+  }
+}
+async function refresh() {
+  if (state.page === 'system' && hasUnsaved() && !confirmLeave()) return;
+  if (state.page === 'system') state.dirtyForms.delete('system-form');
+  state.loading = true; patchPage();
+  await loadPage(true);
+}
+
 function setMenu(value) {
   state.menuOpen = value; get('.sidebar')?.classList.toggle('nav-open', value);
   const button = get('[data-action="menu"]');
@@ -276,8 +359,10 @@ async function openProvider(provider) {
   updateProviderFields(state, Boolean(provider), !provider);
 }
 function openTest(name) { openDialog(`${t("copy.6aa8f49cc9")} ${name}`, testForm(state, name)); }
-function showRequest(id) {
-  const request = state.overview?.metrics?.recent?.find(row => row.request_id === id);
+async function showRequest(id) {
+  const generation = state.authGeneration, revision = state.revision;
+  const request = await api(`/requests/${encodeURIComponent(id)}`);
+  if (generation !== state.authGeneration || revision !== state.revision) return;
   if (request) openDialog(t("copy.0ec1e85b0c"), html`<p class="mono">${id}</p>${button(t("copy.b9431e8522"), 'request-share', id)}${timeline(request)}`);
   else notify(t("copy.10bb4ae8ff"), true);
 }
@@ -320,6 +405,14 @@ async function performProviderToggle(name) {
   if (warning) confirmAction(t("copy.d836cb6c7f"), warning, save, t("copy.b6c82c2d56")); else await save();
 }
 const actions = {
+  'system-tab': node => {
+    state.systemTab = node.dataset.value;
+    document.querySelectorAll('[data-system-section]').forEach(section => { section.hidden = section.dataset.systemSection !== state.systemTab; });
+    document.querySelectorAll('[data-action="system-tab"]').forEach(button => {
+      const active = button.dataset.value === state.systemTab;
+      button.classList.toggle('primary', active); button.setAttribute('aria-pressed', String(active));
+    });
+  },
   navigate: node => navigate(node.dataset.page, { area: node.dataset.area }), go: node => navigate(node.dataset.value), refresh: () => refresh(),
   menu: () => setMenu(!state.menuOpen), 'menu-close': () => { setMenu(false); get('[data-action="menu"]')?.focus(); },
   'nav-group': node => { const expanded = node.getAttribute('aria-expanded') !== 'true'; node.setAttribute('aria-expanded', String(expanded)); document.getElementById(node.getAttribute('aria-controls')).hidden = !expanded; },
@@ -349,6 +442,8 @@ const actions = {
     notify(t("copy.06e5a1efe8"));
   },
   'provider-import': () => openDialog(t("copy.b3c8f4cba9"), importForm()),
+  'list-prev': async () => { state.listOffsets ||= {}; state.listOffsets[state.page] = Math.max(0, (state.listOffsets[state.page] || 0) - 50); await refresh(); },
+  'list-next': async () => { state.listOffsets ||= {}; state.listOffsets[state.page] = (state.listOffsets[state.page] || 0) + 50; await refresh(); },
   'request-detail': node => showRequest(node.dataset.value), 'request-share': node => share('overview', { request: node.dataset.value }),
   'search-curl': () => { const payload = searchPayload(); return copy(`curl '${location.origin}/search' \\\n  -H 'Authorization: Bearer YOUR_API_KEY' \\\n  -H 'Content-Type: application/json' \\\n  -d '${JSON.stringify(payload).replaceAll("'", "'\\''")}'`); },
   'search-share': () => { captureSearchDraft(); return share('search', state.searchDraft); },
@@ -370,6 +465,15 @@ const actions = {
   'audit-next': async () => { if (state.auditOffset + 50 < state.data.total) { state.auditOffset += 50; await refresh({ local: false }); } },
 };
 const submitters = {
+  'system-form': async form => {
+    const revision = state.revision, generation = state.authGeneration;
+    const saved = await api('/settings', 'PUT', { ...Object.fromEntries(new FormData(form)), expected_revision: state.data.settings.revision });
+    if (generation !== state.authGeneration) return;
+    Object.assign(site, saved);
+    document.querySelectorAll('[data-site-name]').forEach(node => { node.textContent = site.site_name; });
+    if (state.revision === revision) { state.data.settings = saved; markClean(form); updateNav(); renderPage(); }
+    notify(t('system.saved'));
+  },
   'login-form': async form => { const data = await api('/login', 'POST', Object.fromEntries(new FormData(form)), false); rememberSession(data); markClean(form); await enterWorkspace(); },
   'reauth-form': async form => {
     const node = form.closest('dialog');
@@ -377,6 +481,7 @@ const submitters = {
     const previousRole = state.user.role;
     rememberSession(data); form.elements.password.value = '';
     if (previousRole !== state.user.role) { node._resolve(); closeDialog(true); state.dirtyForms.clear(); await enterWorkspace(); } else node._resolve();
+    if (previousRole === state.user.role) { state.loading = true; loadPage().catch(error => { if (error.name !== "AbortError") notify(error.message, true); }); }
     notify(t("copy.b83ae0528e"));
   },
   'confirm-form': async form => { await state.confirmAction(); markClean(form); closeDialog(true); },
@@ -398,6 +503,7 @@ const submitters = {
     if (revision === state.revision && get('#test-form') === form) setContent(get('#test-results'), testResults(data));
   },
   'search-form': async form => {
+    if (!state.providersReady) throw new Error(t('performance.refreshing'));
     const payload = searchPayload(); const revision = state.revision; const generation = state.authGeneration;
     get('#results-meta').textContent = t("copy.2f94db33f8");
     setContent(get('#search-results'), html`<div class="skeleton" role="status" aria-label="${t("copy.71a7040350")}"><div></div><div></div></div>`);
@@ -429,7 +535,7 @@ const submitters = {
     if (original && fields.get('password')) payload.password = fields.get('password');
     await api(original ? `/users/${encodeURIComponent(original.id)}` : '/users', original ? 'PUT' : 'POST', payload);
     markClean(form); closeDialog(true); await refresh(); notify(t("copy.6d162be163"));
-    if (original?.id === state.user.id && original.role !== payload.role) { state.user.role = payload.role; await enterWorkspace(); }
+    if (original?.id === state.user.id && original.role !== payload.role) { rememberSession(await api("/session")); await enterWorkspace(); }
   },
   'password-form': async form => {
     const fields = new FormData(form);
@@ -455,7 +561,7 @@ document.addEventListener('click', async event => {
   if (node.disabled) return;
   const isButton = node.tagName === 'BUTTON'; if (isButton) busy(node, true);
   try { await actions[node.dataset.action](node); }
-  catch (error) { notify(error.message, true); }
+  catch (error) { if (error.name !== "AbortError") notify(error.message, true); }
   finally { if (isButton) busy(node, false); }
 });
 document.addEventListener('submit', async event => {
@@ -466,7 +572,7 @@ document.addEventListener('submit', async event => {
   buttons.forEach(node => busy(node, true));
   if (form.querySelector('.form-error')) form.querySelector('.form-error').textContent = '';
   try { await submitters[form.id](form, button); }
-  catch (error) { errorBox(form, error); }
+  catch (error) { if (error.name !== "AbortError") errorBox(form, error); }
   finally { buttons.forEach(node => busy(node, false)); }
 });
 document.addEventListener('input', event => {
@@ -480,7 +586,11 @@ document.addEventListener('input', event => {
 function updateFilter(input) {
   state.filters[state.page] ||= { query: '', status: 'all', sort: 'name' };
   state.filters[state.page][{ 'filter-query': 'query', 'filter-status': 'status', 'filter-sort': 'sort' }[input.name]] = input.value;
-  const render = { providers: providerTable, keys: keyTable, users: userTable }[state.page]; if (render) setContent(get('#table-results'), render(state));
+  clearTimeout(filterTimer);
+  if (['keys', 'users'].includes(state.page)) {
+    state.listOffsets ||= {}; state.listOffsets[state.page] = 0;
+    filterTimer = setTimeout(() => refresh().catch(error => { if (error.name !== 'AbortError') notify(error.message, true); }), input.name === 'filter-query' ? 150 : 0);
+  } else if (state.page === 'providers') setContent(get('#table-results'), providerTable(state));
 }
 document.addEventListener('change', async event => {
   const input = event.target;
@@ -488,8 +598,9 @@ document.addEventListener('change', async event => {
     if (input.id === 'provider-type') updateProviderFields(state, Boolean(state.editor), true);
     if (['filter-status', 'filter-sort'].includes(input.name)) updateFilter(input);
     if (input.name === 'metrics-window') { state.window = input.value; await refresh({ local: false }); }
+    if (input.name === 'user-metrics-window') { state.userWindow = input.value; await refresh({ local: false }); }
     if (input.name === 'theme') { state.theme = input.value; localStorage.setItem('bensz-search-theme', state.theme); applyTheme(); }
-  } catch (error) { notify(error.message, true); }
+  } catch (error) { if (error.name !== "AbortError") notify(error.message, true); }
 });
 document.addEventListener('keydown', event => {
   if (event.key === 'Tab' && state.menuOpen) {
@@ -518,3 +629,28 @@ async function initialize() {
   catch { login(); }
 }
 initialize();
+// Public metadata updates existing elements without gating the first form or
+// replacing user inputs that may already be in use.
+siteReady.then(() => {
+  document.querySelectorAll('[data-site-name]').forEach(node => { node.textContent = site.site_name; });
+  document.querySelectorAll('.workspace-nav-link').forEach(node => {
+    const pages = node.dataset.area === 'admin' ? adminPages : userPages;
+    const title = node.querySelector('span');
+    if (title && Object.hasOwn(pages, node.dataset.page)) title.textContent = t(pages[node.dataset.page][0]);
+  });
+  if (state.user) {
+    updateNav();
+    const info = pageInfo(state);
+    const title = get('[data-testid="page-title"]'), description = get('.page-head p');
+    if (title) title.textContent = info[0]; if (description) description.textContent = info[1];
+    patchPage();
+  } else {
+    document.title = `${site.site_name} · ${site.site_subtitle}`;
+    const intro = get('.login-main .intro'); if (intro) intro.textContent = site.site_subtitle;
+    for (const [name, key] of [['username', 'account.username'], ['password', 'account.password']]) {
+      const input = get(`#login-form [name="${name}"]`);
+      const label = input && document.querySelector(`label[for="${input.id}"]`);
+      if (label) label.textContent = t(key);
+    }
+  }
+});

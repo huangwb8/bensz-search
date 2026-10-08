@@ -542,6 +542,10 @@ def test_key_use_is_counted_once_across_native_http_and_mcp_search(console, monk
     )
     assert console.get("/admin/api/keys").json()["keys"][0]["usage_count"] == 4
     assert console.get("/admin/api/usage?days=7").json()["summary"]["requests"] == 5
+    personal = console.get("/admin/api/usage/me?days=7").json()
+    assert personal["summary"]["requests"] == 5
+    assert personal["by_provider"][0]["name"] == "observed-openai"
+    assert personal["by_provider"][0]["requests"] == 5
 
 
 def test_provider_export_contains_no_credentials_and_import_is_atomic(console):

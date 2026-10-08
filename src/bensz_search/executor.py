@@ -220,13 +220,30 @@ async def execute(
 
     pending = [asyncio.create_task(branch(c)) for c in calls]
     group = asyncio.gather(*pending)
+    cancelled = False
     try:
         await asyncio.wait_for(group, max(0.001, deadline - time.monotonic()))
     except TimeoutError:
         pass
+    except asyncio.CancelledError:
+        cancelled = True
     finally:
         for job in pending:
             if not job.done():
                 job.cancel()
         await asyncio.gather(group, *pending, return_exceptions=True)
+    if cancelled:
+        for attempt in attempts:
+            if attempt.get("error_code") == "timeout":
+                attempt.update(status="cancelled", error_code="cancelled")
+        await router.telemetry.arecord_execution(
+            request_id,
+            "cancelled",
+            attempts,
+            0,
+            round(reserved, 8),
+            max((a["latency_ms"] for a in attempts), default=0),
+            ["Caller cancelled execution"],
+        )
+        raise asyncio.CancelledError
     return buckets, attempts, round(reserved, 8)

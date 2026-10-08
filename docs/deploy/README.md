@@ -1,8 +1,8 @@
 # 本地产品部署与维护
 
-对应 bensz-search 1.0.8 / LiteLLM 1.103.2，部署范围为单机 Docker。本文描述本地部署；服务器及公网入口见[服务器部署说明](server-deployment.md)。
+对应 bensz-search 1.0.9 / LiteLLM 1.103.2，部署范围为单机 Docker。本文描述本地部署；服务器及公网入口见[服务器部署说明](server-deployment.md)。
 
-当前 amd64 发布产物和服务器验证见 [v1.0.8 发布验收](releases/v1.0.8.md)。
+当前 amd64 发布产物和服务器验证见 [v1.0.9 发布验收](releases/v1.0.9.md)。
 
 ## 部署文件与运行目录
 
@@ -15,7 +15,7 @@ Dockerfile、Compose 配置、部署脚本和环境变量示例统一位于本�
 - `compose.yaml`：默认真实服务；`compose.demo.yaml`：模拟测试；`compose.live.yaml`：独立 live demo。
 - `deploy_local.py`：生成私有配置并部署；`.env.example`：环境变量示例。
 
-单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:1.0.8 .`。
+单独构建镜像使用 `docker build -f docs/deploy/Dockerfile -t bensz-search:1.0.9 .`。
 
 ## 初始化与登录
 
@@ -69,7 +69,7 @@ docker compose -f docs/deploy/compose.yaml start search
 
 ## 版本与验证边界
 
-版本 1.0.8 唯一维护于 `pyproject.toml`；Docker Hub 镜像仅提供 `linux/amd64` 的 `1.0.8` 与 `latest`，本地源码构建标签为 1.0.8。镜像与服务器验收见 [v1.0.8 发布记录](releases/v1.0.8.md)。依赖由纳入版本控制的 `.bensz-api/uv.lock` 固定，upstream 未修改。Docker 构建上下文只放行该锁文件，继续排除 `.bensz-api/` 内的环境、缓存及任务材料；两个 Dockerfile 均通过 `scripts/uv.sh` 安装依赖。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
+版本 1.0.9 唯一维护于 `pyproject.toml`；Docker Hub 镜像仅提供 `linux/amd64` 的 `1.0.9` 与 `latest`，本地源码构建标签为 1.0.9。镜像与服务器验收见 [v1.0.9 发布记录](releases/v1.0.9.md)。依赖由纳入版本控制的 `.bensz-api/uv.lock` 固定，upstream 未修改。Docker 构建上下文只放行该锁文件，继续排除 `.bensz-api/` 内的环境、缓存及任务材料；两个 Dockerfile 均通过 `scripts/uv.sh` 安装依赖。升级前运行后台/原生 API 测试、routing benchmark 和真实搜索，不能只改依赖版本范围。
 
 `/health/liveliness` 是进程检查；`/ready` 是配置检查；后台“测试”才验证外部检索。当前已通过的本机验收见 [production-verification.md](../smart-search-router/production-verification.md)。商业源无凭据时只验证配置链路，公网 TLS、多节点和原生 LiteLLM DB 模式未验收。
 
@@ -102,3 +102,11 @@ location /bensz-search/ {
 `BENSZ_SEARCH_MCP_ENABLED=false` 只停用 MCP；`BENSZ_SEARCH_PROTOCOL_ENABLED=false` 停用新搜索业务入口。旧原生搜索继续可用。未知结果的计费请求不会自动重放，目前没有持久任务恢复或幂等计费承诺。
 
 独立 Docker + HTTP/MCP 真实 SearXNG 验收与模拟性能基线见[验证报告](../smart-search-router/protocol/verification.md)。模型凭据缺失时只标注离线契约通过，不能据此发布“全部模型兼容”。
+
+## 搜索容量与健康告警
+
+单 worker 默认允许 16 个进行中的搜索，可通过 `BENSZ_SEARCH_MAX_CONCURRENT_SEARCHES`（1–64）调整。超出容量返回 HTTP 429 和 `Retry-After: 1`，后台读取及健康接口不占该容量。既有 `BENSZ_SEARCH_CONCURRENCY` 继续表示单次协议计划的执行并发。当前 1 GiB 预算下先测量并发阶梯，再调整上限，不直接增加 worker。测试与资源缓存发布说明见[性能实现与验证](../smart-search-router/performance-implementation.md)。
+
+Docker 的 `restart: unless-stopped` 只处理容器退出，不会处理 `unhealthy`。可将 `python3 docs/deploy/check_health.py <搜索容器名>` 接入现有监控定时器：健康返回 0，异常返回 1，无法查询返回 2；监控对非零状态告警。恢复前检查内存、OOM、数据库和 provider 状态；修复后按现有部署流程重建/重启，仅覆盖搜索服务。该脚本只检查状态，不自动重启生产容器。
+
+公共 JS/CSS bundle 位于数据卷的 `assets/`，部署时保留旧 bundle，可让旧页面读取对应模块。备份与回滚应同时保留 SQLite 和公共 bundle；HTML 与私有 API 继续使用 no-store。

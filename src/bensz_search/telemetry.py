@@ -10,9 +10,11 @@ from itertools import combinations
 
 from .fusion import canonical_url
 from .usage import SUCCESS, add, aggregate, summary
+from .work import BlockingWork
 
 logger = logging.getLogger("bensz_search")
 usage_key = ContextVar("bensz_search_usage_key", default=None)
+usage_user = ContextVar("bensz_search_usage_user", default=None)
 
 
 class Telemetry:
@@ -26,14 +28,33 @@ class Telemetry:
         self.providers = {}
         self.days = {}
         self.sink = None
+        self.work = BlockingWork()
 
     def record(
         self, request_id, task, plan, attempts, buckets, estimated_cost, fusion_trace, latency_ms=None
     ):
         with self.lock:
-            return self._record(
+            event = self._record(
                 request_id, task, plan, attempts, buckets, estimated_cost, fusion_trace, latency_ms
             )
+        return self._persist(event)
+
+    async def arecord(self, *args, **kwargs):
+        return await self.work.run(self.record, *args, **kwargs)
+
+    async def arecord_execution(self, *args, **kwargs):
+        return await self.work.run(self.record_execution, *args, **kwargs)
+
+    def _persist(self, event):
+        if self.sink:
+            try:
+                self.sink(event)
+            except Exception:
+                with self.lock:
+                    self.counts["persistence_errors"] += 1
+                logger.error("Search usage persistence failed; process metrics remain available")
+        logger.info("smart_search %s", json.dumps(event, ensure_ascii=False))
+        return event
 
     def _record(
         self, request_id, task, plan, attempts, buckets, estimated_cost, fusion_trace, latency_ms=None
@@ -97,7 +118,8 @@ class Telemetry:
             self.counts["fallbacks"] += sum(bool(a.get("fallback")) for a in attempts)
             for a in attempts:
                 self.counts[f"{intent}:{a['provider']}:{a['status']}"] += 1
-            return self._append(event, latency_ms)
+            self._append(event, latency_ms)
+        return self._persist(event)
 
     def _append(self, event, latency_ms=None):
         event["timestamp"] = datetime.now(UTC).isoformat()
@@ -135,13 +157,6 @@ class Telemetry:
                         a.get("estimated_cost_usd", 0),
                         int(bool(a.get("fallback"))),
                     )
-            if self.sink:
-                try:
-                    self.sink(event)
-                except Exception:
-                    self.counts["persistence_errors"] += 1
-                    logger.error("Search usage persistence failed; process metrics remain available")
-        logger.info("smart_search %s", json.dumps(event, ensure_ascii=False))
         return event
 
     def feedback(self, feedback):
@@ -150,7 +165,11 @@ class Telemetry:
                 raise KeyError("request_id is not in the process-local recent history")
             self.feedback_counts[feedback.event] += 1
 
-    def snapshot(self):
+    def detail(self, request_id):
+        with self.lock:
+            return next((e for e in self.history if e["request_id"] == request_id), None)
+
+    def snapshot(self, compact=False):
         with self.lock:
             return {
                 "scope": "process",
@@ -159,7 +178,24 @@ class Telemetry:
                 "window_basis": "current process lifetime; trend limited to 30 UTC days",
                 "counters": dict(self.counts),
                 "feedback": dict(self.feedback_counts),
-                "recent": list(self.history),
+                "recent": [
+                    {
+                        k: e[k]
+                        for k in (
+                            "request_id",
+                            "timestamp",
+                            "intent",
+                            "providers",
+                            "result_count",
+                            "status",
+                            "latency_ms",
+                        )
+                    }
+                    | {"attempts": [{"status": a["status"]} for a in e["attempts"]]}
+                    for e in list(self.history)[-20:]
+                ]
+                if compact
+                else list(self.history),
                 "summary": summary(self.total),
                 "by_provider": [{"name": n, **summary(d)} for n, d in sorted(self.providers.items())],
                 "trend": [{"day": day, **summary(data)} for day, data in sorted(self.days.items())],

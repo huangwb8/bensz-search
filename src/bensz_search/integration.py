@@ -1,5 +1,6 @@
 """The only version-sensitive adapter: retain LiteLLM HTTP, auth and provider execution."""
 
+import asyncio
 import json
 import threading
 import time
@@ -16,7 +17,7 @@ from .federation import FederationMiddleware
 from .models import SearchRequest
 from .openai_search import provider_call
 from .router import SearchFailed, SmartRouter
-from .telemetry import usage_key
+from .telemetry import usage_key, usage_user
 
 
 @dataclass
@@ -64,10 +65,12 @@ class SearchInputMiddleware:
 
     async def __call__(self, scope, receive, send):
         token = usage_key.set(None)
+        user_token = usage_user.set(None)
         try:
             return await self.handle(scope, receive, send)
         finally:
             usage_key.reset(token)
+            usage_user.reset(user_token)
 
     async def handle(self, scope, receive, send):
         if scope["type"] != "http":
@@ -132,10 +135,15 @@ class SearchInputMiddleware:
                     await send({"type": "http.response.body", "body": payload})
                     return
             if message["type"] == "http.response.start" and is_console:
-                headers = list(message.get("headers", []))
+                headers = [(k, v) for k, v in message.get("headers", []) if k.lower() != b"cache-control"]
                 headers.extend(
                     [
-                        (b"cache-control", b"no-store"),
+                        (
+                            b"cache-control",
+                            b"public, max-age=31536000, immutable"
+                            if path.startswith("/admin/assets/")
+                            else b"no-store",
+                        ),
                         (b"x-content-type-options", b"nosniff"),
                         (
                             b"content-security-policy",
@@ -338,6 +346,9 @@ def install(proxy, registry):
                 else:
                     smart.health.failure(name, "empty")
                 return result
+            except asyncio.CancelledError:
+                attempt["status"] = "cancelled"
+                raise
             except Exception as error:
                 category = failure_category(error)
                 attempt["status"] = category
@@ -345,7 +356,7 @@ def install(proxy, registry):
                 raise
             finally:
                 attempt["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
-                smart.telemetry.record_execution(
+                await smart.telemetry.arecord_execution(
                     request_id,
                     "explicit",
                     [attempt],

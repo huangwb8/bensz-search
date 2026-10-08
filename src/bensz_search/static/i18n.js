@@ -1,5 +1,23 @@
 /** Central product copy. Missing locale entries fall back to Simplified Chinese. */
 const zh = {
+  "performance.refreshing": "正在更新数据…",
+  "performance.updated": "更新于 {time}",
+  "nav.providers": "搜索引擎",
+  "system.title": "系统设置", "system.description": "管理站点信息、浏览器外观，查看安全与服务配置。",
+  "system.site": "站点信息", "system.appearance": "外观", "system.security": "安全与服务",
+  "system.siteHelp": "展示信息保存后生效；默认语言应用于新打开的页面。",
+  "system.name": "站点名称", "system.subtitle": "站点副标题", "system.language": "默认语言",
+  "system.doc": "使用文档链接", "system.support": "联系支持链接",
+  "system.linksHelp": "帮助链接使用 HTTP(S) 地址，留空则隐藏入口。",
+  "system.save": "保存设置", "system.reload": "重新加载", "system.saved": "系统设置已保存",
+  "system.revision": "当前修订 r{revision}", "system.appearanceHelp": "即时生效，仅保存在当前浏览器，无需保存站点设置。",
+  "system.securityHelp": "以下状态由部署配置管理。会话与 Cookie 策略变更需修改部署配置并重启。",
+  "system.registration": "公开注册", "system.registrationClosed": "未开放，由管理员创建用户",
+  "system.session": "登录会话有效期", "system.hours": "{hours} 小时",
+  "system.cookie": "安全 Cookie", "system.cookieOn": "已启用（HTTPS）", "system.cookieOff": "未启用（开发模式）",
+  "system.version": "软件版本", "system.scope": "访问权限", "system.scopeHelp": "搜索接口需要 search 权限；协议与 MCP 需要 protocol 权限。",
+  "usage.providers": "搜索引擎使用情况",
+  "usage.personalScope": "近 {days} 个 UTC 日（含今天），仅统计本人密钥调用与工作台搜索。引擎次数按实际执行累计，包含回退；延迟为区间估算，费用为配置估算。个人统计从功能启用后开始累计。",
   "key.delete": "删除密钥",
   "key.deleteTitle": "删除访问密钥",
   "key.deleteWarning": "删除后密钥立即失效，并从列表中永久移除，无法恢复。历史审计记录仍会保留。",
@@ -74,9 +92,9 @@ const zh = {
   "copy.17826325a8": "运行概览",
   "copy.e453d0e532": "了解搜索运行、服务健康和估算用量。",
   "copy.fad1bb4a41": "连接搜索服务，管理配置、引擎与健康状态。",
-  "copy.7bc3f12944": "搜索调试台",
+  "copy.7bc3f12944": "搜索调试",
   "copy.3c64829b3a": "检查真实搜索结果与路由执行。",
-  "copy.d497c15b0c": "全体访问密钥",
+  "copy.d497c15b0c": "管理员密钥",
   "copy.a5ed694c84": "查看、撤销或删除所有用户的密钥；个人密钥在用户区管理。",
   "copy.fbf413d429": "用户管理",
   "copy.b25cfe77f2": "管理后台账号、角色与访问权限。",
@@ -517,6 +535,25 @@ const zh = {
   "copy.f15d0b371a": "登录会话即将过期；再次操作时可重新登录，当前表单会保留。"
 };
 const en = {
+  'performance.refreshing': 'Refreshing data…',
+  'performance.updated': 'Updated at {time}',
+  'nav.providers': 'Search engines', 'copy.7bc3f12944': 'Search debugging', 'copy.d497c15b0c': 'Administrator keys',
+  'system.title': 'System settings', 'system.description': 'Manage site information, browser appearance and deployment status.',
+  'system.site': 'Site information', 'system.appearance': 'Appearance', 'system.security': 'Security and services',
+  'system.siteHelp': 'Saved information takes effect immediately. The default language applies to newly opened pages.',
+  'system.name': 'Site name', 'system.subtitle': 'Site subtitle', 'system.language': 'Default language',
+  'system.doc': 'Documentation link', 'system.support': 'Support link',
+  'system.linksHelp': 'Use HTTP(S) links. Leave a link empty to hide it.',
+  'system.save': 'Save settings', 'system.reload': 'Reload', 'system.saved': 'System settings saved',
+  'system.revision': 'Current revision r{revision}', 'system.appearanceHelp': 'Applied immediately in this browser, independently of site settings.',
+  'system.securityHelp': 'These policies are managed by deployment configuration. Session and Cookie policy changes require a restart.',
+  'system.registration': 'Public registration', 'system.registrationClosed': 'Closed; administrators create users',
+  'system.session': 'Session lifetime', 'system.hours': '{hours} hours', 'system.cookie': 'Secure Cookie',
+  'system.cookieOn': 'Enabled (HTTPS)', 'system.cookieOff': 'Disabled (development mode)',
+  'system.version': 'Software version', 'system.scope': 'Access permissions',
+  'system.scopeHelp': 'Search requires the search scope; protocol and MCP require the protocol scope.',
+  'usage.providers': 'Search engine usage',
+  'usage.personalScope': 'Last {days} UTC calendar days including today, covering your keys and workspace searches. Engine counts include actual attempts and fallbacks; latency and cost are estimates. Personal tracking starts when this feature is enabled.',
   'key.delete': 'Delete key', 'key.deleteTitle': 'Delete access key',
   'key.deleteWarning': 'The key will stop working immediately and be permanently removed from the list. This cannot be undone. Audit history will be retained.',
   'key.deleteConfirm': 'Confirm key deletion', 'key.deleted': 'Access key deleted',
@@ -525,6 +562,15 @@ const en = {
 };
 const dictionaries = { 'zh-CN': zh, en };
 let locale = 'zh-CN';
+export const site = { site_name: 'bensz-search', site_subtitle: '统一搜索，智能路由', default_language: 'zh-CN', doc_url: '', support_url: '' };
+export const siteReady = (async () => {
+  try {
+    const response = await fetch('/admin/api/site', { cache: 'no-store', signal: AbortSignal.timeout(3000) });
+    if (response.ok) Object.assign(site, await response.json());
+  } catch { /* Public metadata failures retain the built-in site defaults. */ }
+  locale = dictionaries[site.default_language] ? site.default_language : 'zh-CN';
+  document.documentElement.lang = locale;
+})();
 export function setLocale(value) { locale = dictionaries[value] ? value : 'zh-CN'; }
 export function t(key, values = {}) {
   const text = dictionaries[locale]?.[key] ?? zh[key] ?? key;

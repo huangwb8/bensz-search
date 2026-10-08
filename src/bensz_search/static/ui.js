@@ -1,4 +1,4 @@
-import { t } from "./i18n.js";
+import { t, site } from "./i18n.js";
 /** Small, dependency-free components. Interpolated strings are always escaped. */
 class Markup {
   constructor(value) { this.value = value; }
@@ -102,5 +102,5 @@ export function timeline(data = {}) {
 export function brand(workspace = false) {
   return html`<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none">
     <path d="M25 7H12a5 5 0 0 0 0 10h8a4 4 0 0 1 0 8H7" stroke="currentColor" stroke-width="5" stroke-linecap="square"/><circle cx="25" cy="25" r="3" fill="currentColor"/>
-    </svg></span><span class="brand-copy">${workspace ? html`<strong>bensz-search</strong><span class="app-version" id="app-version">${t("copy.a39ee4f07e")}</span>` : 'bensz-search'}</span>`;
+    </svg></span><span class="brand-copy">${workspace ? html`<strong data-site-name>${site.site_name}</strong><span class="app-version" id="app-version">${t("copy.a39ee4f07e")}</span>` : html`<span data-site-name>${site.site_name}</span>`}</span>`;
 }

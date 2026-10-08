@@ -1,7 +1,7 @@
 name: bensz-search
 services:
   search:
-    image: bensz-search:1.0.8
+    image: bensz-search:1.0.9
     build:
       context: ../..
       dockerfile: docs/deploy/Dockerfile
