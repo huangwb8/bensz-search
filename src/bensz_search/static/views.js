@@ -5,11 +5,13 @@ export const adminPages = {
   search: ["copy.7bc3f12944", "copy.3c64829b3a"], keys: ["copy.d497c15b0c", "copy.a5ed694c84"],
   users: ["copy.fbf413d429", "copy.b25cfe77f2"], audit: ["copy.a0f79e91f1", "copy.99c5f7bf43"],
   system: ['system.title', 'system.description'],
+  security: ['security.title', 'security.description'],
 };
 export const userPages = {
   overview: ["copy.af807bc3f5", "copy.47079f22ef"], search: ["copy.44ce7ae909", "copy.1f224bfc43"],
-  keys: ["copy.871d639f51", "copy.806832503e"], settings: ["copy.5ce662ac8d", "copy.1f5bc94035"],
+  keys: ["copy.871d639f51", "copy.806832503e"], settings: ["copy.5ce662ac8d", "account.description"],
   integration: ["copy.c99aba06fb", "copy.236b07ee48"], help: ["copy.ff0d31688b", "copy.91877764ac"],
+  security: ['account.security', 'account.securityDescription'],
 };
 export const pageInfo = state => ((state.area === 'admin' ? adminPages : userPages)[state.page] || userPages.help).map(key => t(key));
 export function head(state, actions = html``) {
@@ -37,6 +39,7 @@ export function loginView() {
 }
 export function shell(state) {
   const isAdmin = state.user.role === 'admin';
+  const initial = Array.from(state.user.username.trim())[0]?.toUpperCase() || 'U';
   const groups = isAdmin ? [['admin', t("copy.e19796712f"), adminPages], ['user', t("copy.0d0e1a86b3"), userPages]] : [['user', t("copy.0d0e1a86b3"), userPages]];
   const navigation = ([area, title, pages]) => html`<nav class="workspace-nav-list" id="nav-${area}" aria-label="${title}${t("copy.88b7692bf5")}">${Object.entries(pages).map(([page, info]) => html`<a class="workspace-nav-link" href="${area === 'admin' ? '/admin/' : '/app/'}#${page}"
     data-action="navigate" data-page="${page}" data-area="${area}" data-testid="nav-${area}-${page}"><span>${t(info[0])}</span><span class="nav-chevron" aria-hidden="true">›</span></a>`)}</nav>`;
@@ -45,11 +48,28 @@ export function shell(state) {
     <div class="nav" id="navigation">${groups.map(group => isAdmin ? html`<section class="workspace-nav-group">
       <button class="workspace-nav-group-toggle" data-action="nav-group" data-value="${group[0]}" aria-expanded="true" aria-controls="nav-${group[0]}">${group[1]}<span aria-hidden="true">⌄</span></button>
       ${navigation(group)}</section>` : navigation(group))}</div>
-    <div class="sidebar-foot"><span>${t("copy.17dae5c572")}</span><a href="/app/#help" data-action="navigate" data-page="help" data-area="user">${t("copy.cde22723fd")}</a></div></aside>
+    <div class="sidebar-foot">${accountMenu(state)}<button class="account-link" type="button" data-action="account-toggle"
+      data-testid="account-settings" aria-label="${t('account.openMenu', { username: state.user.username })}" aria-expanded="false" aria-controls="account-menu">
+      <span class="account-avatar" aria-hidden="true">${initial}</span><span class="account-summary"><strong>${state.user.username}</strong><span class="role">${label(state.user.role)}</span></span>
+      <span class="account-chevron" aria-hidden="true">⌃</span></button></div></aside>
     <div class="workspace"><header class="topbar"><div class="topbar-title"><a href="#overview" data-action="navigate" data-page="overview" data-area="${state.area}">
     ${state.area === 'admin' ? t("copy.ed498fef60") : t("copy.45de2b4b5d")}</a><span class="breadcrumb-divider" aria-hidden="true">/</span><span id="breadcrumb"></span></div>
-    <div class="account"><span class="user-name">${state.user.username}</span><span class="role">${label(state.user.role)}</span>${button(t("copy.3ab8cc1593"), 'logout', '', 'ghost')}</div></header>
+    </header>
     <main id="main" class="content" tabindex="-1" data-testid="workspace"></main></div></div>`;
+}
+function accountMenu(state) {
+  const entry = (area, page, title, symbol) => html`<a class="account-menu-link" href="${area === 'admin' ? '/admin/' : '/app/'}#${page}" data-action="navigate" data-area="${area}" data-page="${page}"><span class="account-menu-symbol" aria-hidden="true">${symbol}</span><span>${t(title)}</span></a>`;
+  return html`<nav class="account-menu" id="account-menu" aria-label="${t('account.menu')}" hidden>
+    <div class="account-menu-heading"><strong>${state.user.username}</strong><span>${label(state.user.role)}</span></div>
+    <div class="account-menu-group"><p>${t('account.personal')}</p>
+      ${entry('user', 'settings', 'copy.5ce662ac8d', '◉')}${entry('user', 'security', 'account.security', '◇')}
+      ${entry('user', 'keys', 'copy.871d639f51', '⌘')}${entry('user', 'integration', 'copy.c99aba06fb', '↗')}</div>
+    ${state.user.role === 'admin' ? html`<div class="account-menu-group"><p>${t('account.administration')}</p>
+      ${entry('admin', 'system', 'system.title', '⚙')}${entry('admin', 'security', 'security.title', '◇')}
+      ${entry('admin', 'users', 'copy.fbf413d429', '◎')}${entry('admin', 'audit', 'copy.a0f79e91f1', '≡')}</div>` : ''}
+    <div class="account-menu-group">${entry('user', 'help', 'copy.ff0d31688b', '?')}
+      <button class="account-menu-link account-menu-exit" type="button" data-action="logout"><span class="account-menu-symbol" aria-hidden="true">↪</span><span>${t('copy.3ab8cc1593')}</span></button></div>
+  </nav>`;
 }
 function toolbar(state, placeholder = t("copy.aa68ada095")) {
   const filter = state.filters[state.page] || { query: '', sort: 'name', status: 'all' };
@@ -230,38 +250,80 @@ export function system(state) {
   if (!settings) return html`${head(state)}<section class="panel">${empty(t('system.title'), state.loading ? t('copy.f020e4630a') : t('copy.f3f42080d8'))}</section>`;
   const deployment = state.data.deployment || {};
   const tab = state.systemTab || 'site';
-  return html`${head(state)}<nav class="actions settings-tabs" aria-label="${t('system.title')}">
-    ${['site', 'appearance', 'security'].map(id => html`<button class="btn ${id === tab ? 'primary' : ''}" data-action="system-tab" data-value="${id}" aria-pressed="${id === tab}" aria-controls="system-${id}">${t('system.' + id)}</button>`)}</nav>
+  return html`${head(state)}<div class="settings-workspace"><nav class="actions settings-tabs" aria-label="${t('system.title')}">
+    ${['site', 'appearance', 'security'].map(id => html`<button class="btn ${id === tab ? 'active' : ''}" data-action="system-tab" data-value="${id}" aria-pressed="${id === tab}" aria-controls="system-${id}">${t(id === 'security' ? 'settings.services' : 'system.' + id)}</button>`)}</nav>
     <section id="system-site" data-system-section="site" ${tab !== 'site' ? html`hidden` : ''}>${panel(t('system.site'), body(html`<form id="system-form">
-      <p class="muted">${t('system.siteHelp')}</p>${formError()}<div class="grid-two">
+      <p class="muted">${t('system.siteHelp')}</p>${formError()}<section class="settings-field-group"><div><h3>${t('settings.display')}</h3><p>${t('settings.displayHelp')}</p></div><div class="grid-two">
       ${field('site_name', t('system.name'), settings.site_name, { required: true, maxlength: 60 })}
-      ${field('site_subtitle', t('system.subtitle'), settings.site_subtitle, { maxlength: 160 })}
-      ${field('default_language', t('system.language'), settings.default_language, { choices: [['zh-CN', '简体中文'], ['en', 'English']] })}
+      ${field('site_subtitle', t('system.subtitle'), settings.site_subtitle, { maxlength: 160 })}</div></section>
+      <section class="settings-field-group"><div><h3>${t('settings.language')}</h3><p>${t('settings.languageHelp')}</p></div><div>
+      ${field('default_language', t('system.language'), settings.default_language, { choices: [['zh-CN', '简体中文'], ['en', 'English']] })}</div></section>
+      <section class="settings-field-group"><div><h3>${t('settings.links')}</h3><p>${t('settings.linksHelp')}</p></div><div class="grid-two">
       ${field('doc_url', t('system.doc'), settings.doc_url, { type: 'url', maxlength: 2048 })}
-      ${field('support_url', t('system.support'), settings.support_url, { type: 'url', maxlength: 2048 })}</div>
+      ${field('support_url', t('system.support'), settings.support_url, { type: 'url', maxlength: 2048 })}</div></section>
       <p class="section-foot">${t('system.linksHelp')}</p><div class="form-actions"><span class="muted">${t('system.revision', { revision: settings.revision })}</span>
       ${button(t('system.reload'), 'refresh')}<button class="btn primary" type="submit">${t('system.save')}</button></div></form>`))}</section>
     <section id="system-appearance" data-system-section="appearance" ${tab !== 'appearance' ? html`hidden` : ''}>${panel(t('system.appearance'), body(html`<p class="muted">${t('system.appearanceHelp')}</p>
       ${field('theme', t("copy.0c3421deb8"), state.theme, { choices: [['system', t("copy.217cfe7db1")], ['light', t("copy.aa0819dfc4")], ['dark', t("copy.a6b75d0680")]] })}`))}</section>
-    <section id="system-security" data-system-section="security" ${tab !== 'security' ? html`hidden` : ''}>${panel(t('system.security'), body(html`<p class="muted">${t('system.securityHelp')}</p>
-      ${table(t('system.security'), [t('copy.9634fb0832'), t('copy.4262c45dc7')], [
-        [t('system.version'), deployment.version || '—'], [t('system.registration'), t('system.registrationClosed')],
-        [t('system.session'), t('system.hours', { hours: deployment.session_lifetime_hours || 12 })],
-        [t('system.cookie'), t(deployment.secure_cookies ? 'system.cookieOn' : 'system.cookieOff')],
+    <section id="system-security" data-system-section="security" ${tab !== 'security' ? html`hidden` : ''}>${panel(t('settings.services'), body(html`<p class="muted">${t('settings.servicesHelp')}</p>
+      ${statusRows([
+        [t('system.version'), deployment.version || t('settings.noValue')],
         ['Search API', '/search'], [t('copy.51e5109618'), '/bensz-search/v1/search'], ['MCP', '/bensz-search/mcp'],
-        [t('system.scope'), t('system.scopeHelp')],
-      ])}<div class="actions">${button(t('nav.providers'), 'go', 'providers')}${button(t('copy.d497c15b0c'), 'go', 'keys')}
-      <a class="btn" href="/api/docs" target="_blank" rel="noopener noreferrer">${t('copy.0c21997c24')}</a></div>`))}</section>`;
+      ])}<div class="settings-shortcuts">${settingShortcut('admin', 'providers', 'nav.providers', 'settings.searchHelp')}
+      ${settingShortcut('admin', 'security', 'security.title', 'settings.securityHelp')}</div><div class="actions">
+      <a class="btn" href="/api/docs" target="_blank" rel="noopener noreferrer">${t('copy.0c21997c24')}</a></div>`))}</section></div>`;
 }
 
 export function settings(state) {
-  return html`${head(state)}<div class="grid-two">${panel(t("copy.81ecab649f"), body(html`<form id="password-form">${formError()}
+  return html`${head(state)}<div class="settings-workspace">${panel(t('account.profile'), body(html`<p class="muted">${t('account.profileHelp')}</p>
+    ${statusRows([[t('account.username'), state.user.username], [t('copy.527d442dc0'), label(state.user.role)]])}
+    <div class="settings-shortcuts">${settingShortcut('user', 'security', 'account.security', 'account.securityDescription')}
+      ${settingShortcut('user', 'keys', 'copy.871d639f51', 'security.keysHelp')}</div>`))}
+    ${panel(t('account.preferences'), body(html`<p class="muted">${t('system.appearanceHelp')}</p>
+      ${field('theme', t("copy.0c3421deb8"), state.theme, { choices: [['system', t("copy.217cfe7db1")], ['light', t("copy.aa0819dfc4")], ['dark', t("copy.a6b75d0680")]] })}`), badge('unknown', t('settings.browser')))}</div>`;
+}
+function statusRows(rows) {
+  return html`<dl class="settings-status">${rows.map(([title, value]) => html`<div><dt>${title}</dt><dd>${value}</dd></div>`)}</dl>`;
+}
+function settingShortcut(area, page, title, description) {
+  return html`<a class="settings-shortcut" href="${area === 'admin' ? '/admin/' : '/app/'}#${page}" data-action="navigate" data-area="${area}" data-page="${page}"><div><strong>${t(title)}</strong><span>${t(description)}</span></div><span aria-hidden="true">→</span></a>`;
+}
+function settingsTabs(group, active, tabs) {
+  return html`<nav class="actions settings-tabs" aria-label="${t(group === 'personal' ? 'account.security' : 'security.title')}">${tabs.map(([id, title]) => html`<button class="btn ${id === active ? 'active' : ''}" data-action="settings-tab" data-group="${group}" data-value="${id}" aria-pressed="${id === active}" aria-controls="${group}-${id}">${t(title)}</button>`)}</nav>`;
+}
+export function security(state) {
+  return state.area === 'admin' ? adminSecurity(state) : personalSecurity(state);
+}
+function personalSecurity(state) {
+  const tab = state.personalTab || 'password';
+  return html`${head(state)}<div class="settings-workspace">${settingsTabs('personal', tab, [['password', 'security.password'], ['sessions', 'security.sessions']])}
+    <section id="personal-password" data-settings-group="personal" data-settings-section="password" ${tab !== 'password' ? html`hidden` : ''}>${panel(t("copy.81ecab649f"), body(html`<form id="password-form">${formError()}
     ${field('current_password', t("copy.a114cfb687"), '', { type: 'password', required: true, autocomplete: 'current-password' })}
     ${field('new_password', t("copy.515e9c7cf7"), '', { type: 'password', required: true, minlength: 12, maxlength: 256, autocomplete: 'new-password' })}
     ${field('confirm_password', t("copy.6fde05a916"), '', { type: 'password', required: true, minlength: 12, maxlength: 256, autocomplete: 'new-password' })}
-    <button class="btn primary" type="submit">${t("copy.8281708430")}</button><p class="section-foot">${t("copy.e0781c74f1")}</p></form>`))}
-    ${panel(t("copy.c0629ce122"), body(html`<p>${state.user.username} · ${label(state.user.role)}</p>${field('theme', t("copy.0c3421deb8"), state.theme, { choices: [['system', t("copy.217cfe7db1")], ['light', t("copy.aa0819dfc4")], ['dark', t("copy.a6b75d0680")]] })}`))}</div>
-    <div id="sessions-panel">${sessionPanel(state)}</div>`;
+    <button class="btn primary" type="submit">${t("copy.8281708430")}</button><p class="section-foot">${t("copy.e0781c74f1")}</p></form>`))}</section>
+    <section id="personal-sessions" data-settings-group="personal" data-settings-section="sessions" ${tab !== 'sessions' ? html`hidden` : ''}><p class="section-foot">${t('security.sessionsHelp')}</p><div id="sessions-panel">${sessionPanel(state)}</div></section>
+    <p class="section-foot">${t('security.keysHelp')} <a href="/app/#keys" data-action="navigate" data-area="user" data-page="keys">${t('security.personalKeys')} →</a></p></div>`;
+}
+function adminSecurity(state) {
+  const deployment = state.data.deployment;
+  const tab = state.securityTab || 'access';
+  if (!deployment) return html`${head(state)}<section class="panel">${empty(t('security.title'), state.loading ? t('copy.f020e4630a') : t('copy.f3f42080d8'))}</section>`;
+  const cookie = typeof deployment.secure_cookies === 'boolean' ? t(deployment.secure_cookies ? 'system.cookieOn' : 'system.cookieOff') : t('settings.noValue');
+  return html`${head(state)}<div class="settings-workspace">${settingsTabs('security', tab, [['access', 'security.access'], ['sessions', 'security.sessions'], ['keys', 'security.keys'], ['deployment', 'security.deployment']])}
+    <section id="security-access" data-settings-group="security" data-settings-section="access" ${tab !== 'access' ? html`hidden` : ''}>${panel(t('security.access'), body(html`<p class="muted">${t('security.accessHelp')}</p>
+      ${statusRows([[t('system.registration'), deployment.public_registration === false ? t('system.registrationClosed') : t('settings.noValue')], [t('security.passwordRule'), t('security.passwordHelp')]])}
+      <div class="settings-shortcuts">${settingShortcut('admin', 'users', 'copy.fbf413d429', 'security.accessHelp')}</div>`))}</section>
+    <section id="security-sessions" data-settings-group="security" data-settings-section="sessions" ${tab !== 'sessions' ? html`hidden` : ''}>${panel(t('security.sessions'), body(html`<p class="muted">${t('security.sessionHelp')}</p>
+      ${statusRows([[t('system.session'), deployment.session_lifetime_hours == null ? t('settings.noValue') : t('system.hours', { hours: deployment.session_lifetime_hours })]])}
+      <div class="settings-shortcuts">${settingShortcut('user', 'security', 'settings.manageSessions', 'security.sessionsHelp')}</div>`))}</section>
+    <section id="security-keys" data-settings-group="security" data-settings-section="keys" ${tab !== 'keys' ? html`hidden` : ''}>${panel(t('security.keys'), body(html`<p class="muted">${t('security.keysHelp')}</p>
+      ${statusRows([[t('security.searchScope'), '/search'], [t('security.protocolScope'), html`<code>/bensz-search/v1/search</code><br><code>/bensz-search/mcp</code>`]])}
+      <div class="settings-shortcuts">${settingShortcut('admin', 'keys', 'copy.d497c15b0c', 'system.scopeHelp')}${settingShortcut('admin', 'audit', 'copy.a0f79e91f1', 'security.auditHelp')}</div>`))}</section>
+    <section id="security-deployment" data-settings-group="security" data-settings-section="deployment" ${tab !== 'deployment' ? html`hidden` : ''}>${panel(t('security.deployment'), body(html`<p class="muted">${t('security.deploymentHelp')}</p>
+      ${statusRows([[t('system.cookie'), cookie], [t('security.csrf'), t('security.csrfHelp')]])}
+      ${deployment.secure_cookies === false ? html`<div class="note warning">${t('security.cookieWarning')}</div>` : ''}
+      <p class="section-foot">${t('security.cookieHelp')}</p>`))}</section></div>`;
 }
 
 export function sessionPanel(state) {
@@ -304,4 +366,4 @@ export function help(state) {
 function safeLink(url, fallback) {
   try { const parsed = new URL(url, location.origin); return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : fallback; } catch { return fallback; }
 }
-export const views = { overview, providers, search, keys, users, audit, settings, system, integration, help };
+export const views = { overview, providers, search, keys, users, audit, settings, system, security, integration, help };

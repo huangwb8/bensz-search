@@ -186,6 +186,7 @@ def run(args):
                 "error": False,
                 "empty": False,
                 "calls": [],
+                "reads": [],
                 "usage_days": [],
             }
             page = browser.new_page(viewport={"width": width, "height": height}, reduced_motion="reduce")
@@ -203,6 +204,8 @@ def run(args):
                 request = route.request
                 path = urlsplit(request.url).path.removeprefix("/admin/api")
                 method = request.method
+                if method == "GET":
+                    control["reads"].append(path)
                 if path == "/session" and not control["authenticated"]:
                     route.fulfill(status=401, json={"detail": "Session expired"})
                     return
@@ -370,6 +373,20 @@ def run(args):
                 )
                 assert page.locator("#app-version").inner_text() == "v1.0.5"
 
+            def open_account(page=page, width=width, height=height):
+                trigger = page.locator('[data-testid="account-settings"]')
+                if not trigger.is_visible():
+                    page.locator('[data-action="menu"]').click()
+                trigger.click()
+                menu = page.locator("#account-menu")
+                menu.wait_for(state="visible")
+                assert trigger.get_attribute("aria-expanded") == "true"
+                bounds = menu.bounding_box()
+                assert bounds["x"] >= 0 and bounds["y"] >= 0, bounds
+                assert bounds["x"] + bounds["width"] <= width, bounds
+                assert bounds["y"] + bounds["height"] <= height, bounds
+                return menu
+
             def delete_key(key_id, global_scope=False, page=page, control=control):
                 action = page.locator(f'[data-action="key-delete"][data-value="{key_id}"]')
                 action.locator("xpath=ancestor::details").locator("summary").click()
@@ -402,8 +419,8 @@ def run(args):
             assert page.locator(".trend-bar").count() == 2
             if width > 720:
                 assert page.locator('[data-action="menu"]').is_hidden()
-            assert page.locator("nav#nav-admin a").count() == 7
-            assert page.locator("nav#nav-user a").count() == 6
+            assert page.locator("nav#nav-admin a").count() == 8
+            assert page.locator("nav#nav-user a").count() == 7
             if width <= 720:
                 page.locator('[data-action="menu"]').click()
             assert page.locator('[data-action="nav-group"]').count() == 2
@@ -426,6 +443,25 @@ def run(args):
             if width <= 720:
                 page.keyboard.press("Escape")
             shot("overview")
+            menu = open_account()
+            assert menu.locator('[data-area="admin"]').count() == 4
+            assert menu.locator('[data-area="user"][data-page="security"]').count() == 1
+            shot("account-menu")
+            page.keyboard.press("Escape")
+            assert menu.is_hidden()
+            assert page.locator('[data-testid="account-settings"]').evaluate(
+                "node => node === document.activeElement"
+            )
+            menu = open_account()
+            page.locator(".sidebar-header").click(position={"x": 5, "y": 5})
+            assert menu.is_hidden()
+            trigger = page.locator('[data-testid="account-settings"]')
+            trigger.focus()
+            page.keyboard.press("Enter")
+            assert menu.is_visible()
+            page.keyboard.press("Escape")
+            if width <= 720:
+                page.keyboard.press("Escape")
             for bad in ["constructor", "__proto__", "toString"]:
                 page.evaluate("bad => history.pushState(null, '', '/admin/#' + bad)", bad)
                 page.evaluate("dispatchEvent(new PopStateEvent('popstate'))")
@@ -471,6 +507,15 @@ def run(args):
             assert page.input_value("#site-name") == "搜索中心"
             page.locator('[data-action="system-tab"][data-value="appearance"]').click()
             page.select_option("#theme", "light")
+            navigate("admin", "security")
+            assert page.locator('[data-testid="page-title"]').inner_text() == "安全设置"
+            assert page.locator("#password-form").count() == 0
+            shot("admin-security")
+            for section in ["sessions", "keys", "deployment", "access"]:
+                page.locator(
+                    f'[data-action="settings-tab"][data-group="security"][data-value="{section}"]'
+                ).click()
+                shot("admin-security-" + section)
             if args.system_only:
                 report["viewports"].append(
                     {
@@ -484,6 +529,8 @@ def run(args):
                             "save and brand update",
                             "revision conflict and reload",
                             "deployment status",
+                            "account menu, keyboard, dismissal and viewport bounds",
+                            "independent admin security sections",
                             "no horizontal overflow",
                         ],
                     }
@@ -498,6 +545,7 @@ def run(args):
                 ("user", "overview"),
                 ("user", "keys"),
                 ("user", "settings"),
+                ("user", "security"),
                 ("user", "integration"),
                 ("user", "help"),
             ]:
@@ -584,7 +632,7 @@ def run(args):
                 shot("navigation")
                 page.keyboard.press("Escape")
                 assert page.locator(".nav-backdrop").is_hidden()
-            navigate("user", "settings")
+            navigate("user", "security")
             page.fill('[name="current_password"]', "preserved-unsaved-password")
 
             def dismiss_unsaved(dialog):
@@ -594,13 +642,19 @@ def run(args):
             page.evaluate(
                 "history.pushState(null, '', '/admin/#providers'); dispatchEvent(new PopStateEvent('popstate'))"
             )
-            assert page.url.endswith("/app/#settings")
+            assert page.url.endswith("/app/#security")
             assert page.locator('[name="current_password"]').input_value() == "preserved-unsaved-password"
             page.remove_listener("dialog", dismiss_unsaved)
+            page.locator('[data-action="settings-tab"][data-group="personal"][data-value="sessions"]').click()
             page.locator('[data-action="sessions-revoke"]').click()
             page.locator('#confirm-form button[type="submit"]').click()
             page.locator("#dialog").wait_for(state="hidden")
             assert page.locator('[name="current_password"]').input_value() == "preserved-unsaved-password"
+            page.locator('[data-action="settings-tab"][data-group="personal"][data-value="password"]').click()
+            assert page.locator('[name="current_password"]').input_value() == "preserved-unsaved-password"
+            shot("personal-security")
+            page.once("dialog", lambda dialog: dialog.accept())
+            navigate("user", "settings")
             page.select_option('[name="theme"]', "dark")
             shot("dark")
             page.select_option('[name="theme"]', "light")
@@ -627,9 +681,13 @@ def run(args):
             control["error"] = False
             page.locator('[data-action="refresh"]').first.click()
             page.locator('[data-testid="providers-table"]').wait_for()
+            if width <= 720:
+                page.locator('[data-action="menu"]').click()
+            open_account()
             page.locator('[data-action="logout"]').click()
             page.locator("#login-form").wait_for()
             data["user"]["role"] = "member"
+            member_read_offset = len(control["reads"])
             page.fill("#username", "demo")
             page.fill("#password", "synthetic-password")
             page.locator('#login-form button[type="submit"]').click()
@@ -647,14 +705,25 @@ def run(args):
                 page.locator('[data-action="menu"]').click()
             assert page.locator('[data-action="nav-group"]').count() == 0
             assert page.locator("#nav-admin").count() == 0
-            assert page.locator("nav#nav-user a").count() == 6
+            assert page.locator("nav#nav-user a").count() == 7
             nav_x = page.locator("#navigation").bounding_box()["x"]
             link_x = page.locator("#nav-user a").first.bounding_box()["x"]
             assert abs(link_x - nav_x) < 1, (name, nav_x, link_x)
             assert page.locator('[data-testid="nav-user-overview"]').get_attribute("aria-current") == "page"
             shot("member-navigation")
+            menu = open_account()
+            assert menu.locator('[data-area="admin"]').count() == 0
+            shot("member-account-menu")
+            menu.locator('[data-area="user"][data-page="security"]').click()
+            page.locator("#password-form").wait_for()
+            assert page.url.endswith("/app/#security")
+            assert menu.is_hidden()
+            assert "/settings" not in control["reads"][member_read_offset:]
+            shot("member-security")
+            navigate("user", "overview")
             if width <= 720:
-                page.keyboard.press("Escape")
+                if page.locator(".nav-backdrop").is_visible():
+                    page.keyboard.press("Escape")
             usage = page.locator('[data-testid="personal-provider-usage"]')
             assert usage.get_by_text("web-search", exact=True).count() == 1
             assert usage.get_by_text("local-search", exact=True).count() == 0
@@ -701,6 +770,8 @@ def run(args):
                         "admin/member prototype route fallback",
                         "cancelled navigation restores URL",
                         "session refresh preserves password form",
+                        "account menu admin/member entries, keyboard, dismissal and viewport bounds",
+                        "independent admin security and personal password/session sections",
                         "cross-area brand version",
                         "personal provider usage, 7/30 day selection and empty state",
                     ],

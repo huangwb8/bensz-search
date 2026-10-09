@@ -7,7 +7,7 @@ const app = document.getElementById('app');
 const dialog = document.getElementById('dialog');
 const state = { user: null, csrf: '', expiresAt: null, expiryWarned: false, area: 'user', page: 'overview', providers: [], catalog: [], overview: null, data: {},
   revision: 0, authGeneration: 0, loadRevision: 0, currentURL: '', filters: {}, window: 'process', userWindow: '7d', searchDraft: {}, searchResult: null, tests: {}, auditFilters: {}, auditOffset: 0,
-  theme: localStorage.getItem('bensz-search-theme') || 'system', menuOpen: false, dialogDirty: false, dirtyForms: new Set(), secret: null, editor: null };
+  theme: localStorage.getItem('bensz-search-theme') || 'system', menuOpen: false, accountMenuOpen: false, dialogDirty: false, dirtyForms: new Set(), secret: null, editor: null };
 let opener = null;
 let reauthPending = null;
 const resources = new ResourceCache();
@@ -131,7 +131,7 @@ function clearPrivateState() {
   state.user = null; state.csrf = ''; state.secret = null; state.overview = null; state.searchResult = null;
   state.searchDraft = {}; state.tests = {}; state.data = {}; state.providers = []; state.catalog = []; state.snippets = {}; state.filters = {};
   state.auditFilters = {}; state.auditOffset = 0; state.listOffsets = {}; state.updated = {}; state.loadErrors = {}; state.window = 'process'; state.expiresAt = null; state.expiryWarned = false; state.confirmAction = null; state.currentURL = '';
-  state.menuOpen = false; document.body.classList.remove('menu-open'); state.dirtyForms.clear(); state.dialogDirty = false; state.editor = null;
+  state.menuOpen = false; state.accountMenuOpen = false; document.body.classList.remove('menu-open'); state.dirtyForms.clear(); state.dialogDirty = false; state.editor = null;
   state.authGeneration++; state.revision++; closeDialog(true);
   opener = null; setContent(document.getElementById('notice'), html``);
 }
@@ -164,6 +164,11 @@ async function navigate(page, { area = state.area, replace = false, params = new
   closeDialog(true);
   const changeArea = state.area !== targetArea;
   state.area = targetArea; state.page = page;
+  const tab = params.get('tab');
+  if (page === 'system') state.systemTab = ['site', 'appearance', 'security'].includes(tab) ? tab : 'site';
+  if (page === 'security' && targetArea === 'admin') state.securityTab = ['access', 'sessions', 'keys', 'deployment'].includes(tab) ? tab : 'access';
+  if (page === 'security' && targetArea === 'user') state.personalTab = ['password', 'sessions'].includes(tab) ? tab : 'password';
+  setAccountMenu(false);
   if (targetArea === 'user') state.window = 'process';
   const url = `${targetArea === 'admin' ? '/admin/' : '/app/'}#${page}${params.size ? '?' + params.toString() : ''}`;
   if (history && (replace || state.currentURL !== url)) window.history[replace ? 'replaceState' : 'pushState'](null, '', url);
@@ -185,7 +190,7 @@ async function navigate(page, { area = state.area, replace = false, params = new
 }
 function updateNav() {
   updateVersion();
-  document.querySelectorAll('.workspace-nav-link').forEach(node => {
+  document.querySelectorAll('.workspace-nav-link, .account-menu-link[data-page]').forEach(node => {
     const active = node.dataset.area === state.area && node.dataset.page === state.page;
     node.classList.toggle('active', active);
     if (active) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current');
@@ -243,8 +248,8 @@ async function loadPage(force = false) {
   }
   if (page === 'providers') read('/providers', 30000, data => { state.providers = data.providers || []; state.catalog = data.catalog || []; });
   if (['keys', 'users'].includes(page)) read(listPath(page), 5000, data => { Object.assign(state.data, data); });
-  if (page === 'settings') read('/sessions', 5000, data => { state.data = data; });
-  if (page === 'system') read('/settings', 0, data => { state.data = data; });
+  if (page === 'security' && area === 'user') read('/sessions', 5000, data => { state.data = data; });
+  if (page === 'system' || (page === 'security' && area === 'admin')) read('/settings', 0, data => { state.data = data; });
   if (page === 'help') read('/releases', 30000, data => { state.data = data; });
   if (page === 'audit') {
     const params = new URLSearchParams({ limit: '50', offset: String(state.auditOffset) });
@@ -283,7 +288,7 @@ function patchPage() {
   else if (['providers', 'keys', 'users'].includes(state.page) && get('#table-results')) {
     setContent(get('#table-results'), { providers: providerTable, keys: keyTable, users: userTable }[state.page](state));
     updatePagination();
-  } else if (state.page === 'settings' && get('#sessions-panel')) setContent(get('#sessions-panel'), sessionPanel(state));
+  } else if (state.page === 'security' && state.area === 'user' && get('#sessions-panel')) setContent(get('#sessions-panel'), sessionPanel(state));
   else {
     const template = document.createElement('template'); template.innerHTML = String(views[state.page](state));
     if (state.page === 'overview') {
@@ -317,6 +322,7 @@ async function refresh() {
 }
 
 function setMenu(value) {
+  if (!value) setAccountMenu(false);
   state.menuOpen = value; get('.sidebar')?.classList.toggle('nav-open', value);
   const button = get('[data-action="menu"]');
   button?.setAttribute('aria-expanded', String(value)); button?.setAttribute('aria-controls', 'navigation');
@@ -325,7 +331,34 @@ function setMenu(value) {
   if (get('.workspace')) get('.workspace').inert = value;
   if (value) get('.sidebar .workspace-nav-link')?.focus();
 }
+function setAccountMenu(value, restoreFocus = false) {
+  const trigger = get('[data-action="account-toggle"]');
+  const menu = get('#account-menu');
+  state.accountMenuOpen = value;
+  if (menu) menu.hidden = !value;
+  trigger?.setAttribute('aria-expanded', String(value));
+  if (value) menu?.querySelector('a,button')?.focus({ preventScroll: true });
+  else if (restoreFocus) trigger?.focus({ preventScroll: true });
+}
+function switchSettingsTab(group, value) {
+  const key = { system: 'systemTab', security: 'securityTab', personal: 'personalTab' }[group];
+  if (!key) return;
+  state[key] = value;
+  const sectionSelector = group === 'system' ? '[data-system-section]' : `[data-settings-group="${group}"]`;
+  document.querySelectorAll(sectionSelector).forEach(section => { section.hidden = (group === 'system' ? section.dataset.systemSection : section.dataset.settingsSection) !== value; });
+  const buttons = group === 'system' ? '[data-action="system-tab"]' : `[data-action="settings-tab"][data-group="${group}"]`;
+  document.querySelectorAll(buttons).forEach(button => {
+    const active = button.dataset.value === value;
+    button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
+  });
+  const url = new URL(state.currentURL, location.origin);
+  const params = new URLSearchParams(url.hash.split('?')[1] || '');
+  params.set('tab', value); url.hash = `${state.page}?${params}`;
+  state.currentURL = url.pathname + url.hash;
+  history.replaceState(null, '', state.currentURL);
+}
 function openDialog(title, content, { drawer = true, dirty = false } = {}) {
+  setAccountMenu(false);
   if (dialog.open && !closeDialog()) return false;
   opener = document.activeElement;
   state.dialogDirty = dirty;
@@ -405,14 +438,9 @@ async function performProviderToggle(name) {
   if (warning) confirmAction(t("copy.d836cb6c7f"), warning, save, t("copy.b6c82c2d56")); else await save();
 }
 const actions = {
-  'system-tab': node => {
-    state.systemTab = node.dataset.value;
-    document.querySelectorAll('[data-system-section]').forEach(section => { section.hidden = section.dataset.systemSection !== state.systemTab; });
-    document.querySelectorAll('[data-action="system-tab"]').forEach(button => {
-      const active = button.dataset.value === state.systemTab;
-      button.classList.toggle('primary', active); button.setAttribute('aria-pressed', String(active));
-    });
-  },
+  'system-tab': node => switchSettingsTab('system', node.dataset.value),
+  'settings-tab': node => switchSettingsTab(node.dataset.group, node.dataset.value),
+  'account-toggle': () => setAccountMenu(!state.accountMenuOpen),
   navigate: node => navigate(node.dataset.page, { area: node.dataset.area }), go: node => navigate(node.dataset.value), refresh: () => refresh(),
   menu: () => setMenu(!state.menuOpen), 'menu-close': () => { setMenu(false); get('[data-action="menu"]')?.focus(); },
   'nav-group': node => { const expanded = node.getAttribute('aria-expanded') !== 'true'; node.setAttribute('aria-expanded', String(expanded)); document.getElementById(node.getAttribute('aria-controls')).hidden = !expanded; },
@@ -554,6 +582,7 @@ const submitters = {
 };
 // A single event delegate handles all application buttons and forms.
 document.addEventListener('click', async event => {
+  if (state.accountMenuOpen && !event.target.closest('.sidebar-foot')) setAccountMenu(false);
   const node = event.target.closest('[data-action]');
   if (!node || !actions[node.dataset.action]) return;
   if (node.tagName === 'A' && (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)) return;
@@ -603,12 +632,16 @@ document.addEventListener('change', async event => {
   } catch (error) { if (error.name !== "AbortError") notify(error.message, true); }
 });
 document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && state.accountMenuOpen) { event.preventDefault(); setAccountMenu(false, true); return; }
   if (event.key === 'Tab' && state.menuOpen) {
-    const nodes = [...get('.sidebar').querySelectorAll('a,button')].filter(node => node.getClientRects().length);
+    const nodes = [...get('.sidebar').querySelectorAll('a,button')].filter(node => node.getClientRects().length && !node.disabled);
     if (event.shiftKey && document.activeElement === nodes[0]) { event.preventDefault(); nodes.at(-1).focus(); }
     if (!event.shiftKey && document.activeElement === nodes.at(-1)) { event.preventDefault(); nodes[0].focus(); }
   }
   if (event.key === 'Escape' && state.menuOpen) { event.preventDefault(); setMenu(false); get('[data-action="menu"]')?.focus(); } });
+document.addEventListener('focusin', event => {
+  if (state.accountMenuOpen && !event.target.closest('.sidebar-foot')) setAccountMenu(false);
+});
 window.addEventListener('resize', () => { if (innerWidth > 720 && state.menuOpen) setMenu(false); });
 window.addEventListener('beforeunload', event => { if (hasUnsaved() || state.secret) { event.preventDefault(); event.returnValue = ''; } });
 function restoreLocation() { if (state.currentURL) history.replaceState(null, '', state.currentURL); }
